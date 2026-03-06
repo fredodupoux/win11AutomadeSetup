@@ -2,7 +2,7 @@
 
 > Automated Windows 11 provisioning — from bare metal to ready-to-use in one boot. No clicking through OOBE, no OEM bloat, no Microsoft account required.
 
-Made with 🤍 🇭🇹 
+Made with ♥️ 🇭🇹 
 
 ---
 
@@ -196,6 +196,6 @@ MIT License — free to use, modify, and distribute.
 
 <div align="center">
 
-Made with 🤍 in 🇭🇹 by **Zaboka Systems**
+Made with ♥️ 🇭🇹
 
 </div>
