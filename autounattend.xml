@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================
+  Windows 11 Unattended Answer File
+  ============================================================
+  PURPOSE: Bypass OOBE, create local IT admin account,
+           auto-copy provisioning files from USB, launch Setup.ps1.
+
+  USB STRUCTURE REQUIRED:
+    USB root/
+    ├── autounattend.xml        (this file)
+    ├── [Windows 11 ISO files]  (sources/, boot/, efi/, etc.)
+    └── Setup/
+        ├── Setup.ps1
+        └── packages.json
+
+  HOW TO CREATE THE USB:
+    1. Use Rufus (https://rufus.ie) to write the Windows 11 ISO to USB
+       - Partition scheme: GPT
+       - Target system: UEFI (non-CSM)
+       - Leave all other defaults
+    2. Copy this file (autounattend.xml) to the root of the USB
+    3. Copy the Setup\ folder to the root of the USB
+
+  BEFORE DEPLOYING - CHANGE THESE:
+    - ITAdmin password (search for CHANGEME_AdminPassword1!)
+    - TimeZone if not Eastern
+    - RegisteredOrganization if needed
+    - Windows edition in ImageInstall (Home vs Pro)
+
+  DELL OPTIPLEX 3070/5070 MFF NOTES:
+    - No driver injection needed. Windows 11 inbox drivers cover
+      Intel I219 NIC, UHD 630 graphics, Realtek audio.
+    - Dell Command | Update (in packages.json) handles the rest
+      post-install (BIOS updates, firmware, chipset).
+    - TPM 2.0 is present on these models; BitLocker will work.
+  ============================================================
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend"
+          xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+
+  <!-- ========================================================
+       PASS 1: windowsPE
+       Runs in Windows PE before files are copied.
+       Sets installer locale and configures disk layout.
+       ======================================================== -->
+  <settings pass="windowsPE">
+
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <SetupUILanguage>
+        <UILanguage>en-US</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UILanguageFallback>en-US</UILanguageFallback>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>IT Admin</FullName>
+        <Organization>Zaboka Systems</Organization>
+        <!--
+          Product key: remove this block to use the OEM digital license
+          embedded in the device firmware (standard on Dell retail units).
+          Only add a key here for volume licensing / KMS scenarios.
+        -->
+        <!-- <ProductKey>
+          <Key>XXXXX-XXXXX-XXXXX-XXXXX-XXXXX</Key>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey> -->
+      </UserData>
+
+      <!-- ====================================================
+           DISK LAYOUT — UEFI/GPT (erases Disk 0 entirely)
+           Partition map:
+             1. EFI System Partition  (100 MB, FAT32)
+             2. Microsoft Reserved    ( 16 MB, no filesystem)
+             3. Windows OS            (all remaining space, NTFS)
+           Windows Setup creates the WinRE recovery partition
+           automatically at the end — no need to define it here.
+           ==================================================== -->
+      <DiskConfiguration>
+        <WillShowUI>OnError</WillShowUI>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>EFI</Type>
+              <Size>100</Size>
+            </CreatePartition>
+
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>MSR</Type>
+              <Size>16</Size>
+            </CreatePartition>
+
+            <!-- Extend=true takes all remaining disk space -->
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Type>Primary</Type>
+              <Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Label>System</Label>
+              <Format>FAT32</Format>
+            </ModifyPartition>
+
+            <!-- MSR: no format, no label -->
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+            </ModifyPartition>
+
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order>
+              <PartitionID>3</PartitionID>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+              <Format>NTFS</Format>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+
+      <!-- Select the Windows edition to install.
+           Common values: "Windows 11 Pro", "Windows 11 Home",
+                          "Windows 11 Enterprise" -->
+      <ImageInstall>
+        <OSImage>
+          <WillShowUI>OnError</WillShowUI>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 11 Pro</Value>
+            </MetaData>
+          </InstallFrom>
+        </OSImage>
+      </ImageInstall>
+
+    </component>
+  </settings>
+
+  <!-- ========================================================
+       PASS 2: specialize
+       Runs after first boot, before OOBE, as SYSTEM.
+       Handles: computer name, time zone, and — critically —
+       auto-copying the Setup\ folder from the USB to C:\Setup
+       so it is available when the user logs in.
+       ======================================================== -->
+  <settings pass="specialize">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <!--
+        Temporary name — Setup.ps1 will prompt to rename interactively.
+        Use * to let Windows generate a random name (e.g. DESKTOP-XXXXXX).
+      -->
+      <ComputerName>WIN11-SETUP</ComputerName>
+      <TimeZone>Eastern Standard Time</TimeZone>
+      <RegisteredOrganization>Zaboka Systems</RegisteredOrganization>
+    </component>
+
+    <component name="Microsoft-Windows-Deployment"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <RunSynchronous>
+
+        <!--
+          Scan all drive letters for the Setup\ folder (identified by
+          the presence of Setup\Setup.ps1). Copies it to C:\Setup so
+          it persists after the USB is removed.
+          Uses PowerShell — available during specialize pass.
+        -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Copy provisioning files from USB to C:\Setup</Description>
+          <Path>powershell.exe -NonInteractive -Command "foreach ($drive in [System.IO.DriveInfo]::GetDrives()) { $marker = [IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup', 'Setup.ps1'); if (Test-Path $marker) { Copy-Item -Path ([IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup')) -Destination 'C:\' -Recurse -Force; break } }"</Path>
+        </RunSynchronousCommand>
+
+        <!-- Set PowerShell execution policy so Setup.ps1 can run -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Description>Allow PowerShell script execution</Description>
+          <Path>powershell.exe -NonInteractive -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"</Path>
+        </RunSynchronousCommand>
+
+      </RunSynchronous>
+    </component>
+
+  </settings>
+
+  <!-- ========================================================
+       PASS 3: oobeSystem
+       Runs during OOBE.
+       Handles: skip all OOBE screens, create local IT admin
+                account, auto-logon once, launch Setup.ps1.
+       ======================================================== -->
+  <settings pass="oobeSystem">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+
+      <!-- ====================================================
+           OOBE BYPASS
+           HideOnlineAccountScreens is the key setting that
+           forces the local account path on Windows 11 Pro,
+           bypassing the Microsoft account requirement entirely.
+           ==================================================== -->
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>false</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>false</HideWirelessSetupInOOBE>
+        <!-- 1=Express settings, 3=Skip privacy settings screen -->
+        <ProtectYourPC>3</ProtectYourPC>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+        <UnattendEnableRetailDemo>false</UnattendEnableRetailDemo>
+      </OOBE>
+
+      <!-- ====================================================
+           IT ADMIN LOCAL ACCOUNT
+           Created during OOBE — no Microsoft account needed.
+
+           SECURITY: Change CHANGEME_AdminPassword1! before deploying.
+           This file sits on the USB in plain text. Use a temporary
+           password and rotate it once Setup.ps1 finishes, or use
+           Base64-encoded password format (see Microsoft docs on
+           Answer File security / offline password encoding).
+           ==================================================== -->
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>ITAdmin</Name>
+            <DisplayName>IT Admin</DisplayName>
+            <Group>Administrators</Group>
+            <Password>
+              <Value>CHANGEME_AdminPassword1!</Value>
+              <PlainText>true</PlainText>
+            </Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+
+      <!-- ====================================================
+           AUTO LOGON (one time only)
+           Logs in as ITAdmin automatically so Setup.ps1 runs
+           on first boot without anyone touching the keyboard.
+           LogonCount=1 means subsequent logins require password.
+           ==================================================== -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>ITAdmin</Username>
+        <LogonCount>1</LogonCount>
+        <Password>
+          <Value>CHANGEME_AdminPassword1!</Value>
+          <PlainText>true</PlainText>
+        </Password>
+      </AutoLogon>
+
+      <!-- ====================================================
+           LAUNCH Setup.ps1 ON FIRST LOGIN
+           Runs from C:\Setup (copied there during specialize).
+           -NoExit keeps the window open so the IT admin can
+           interact with prompts (computer name, user creation, etc.)
+           ==================================================== -->
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Launch provisioning script</Description>
+          <CommandLine>powershell.exe -NoExit -ExecutionPolicy Bypass -File "C:\Setup\Setup.ps1"</CommandLine>
+          <RequiresUserInput>true</RequiresUserInput>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+
+    </component>
+
+    <!-- OS locale (separate from installer locale above) -->
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UILanguageFallback>en-US</UILanguageFallback>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+  </settings>
+
+</unattend>
