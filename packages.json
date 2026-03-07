@@ -16,11 +16,9 @@
                 {"PackageIdentifier": "Google.Chrome"},
                 {"PackageIdentifier": "Mozilla.Firefox"},
 
-                {"PackageIdentifier": "Microsoft.VisualStudioCode"},
-                {"PackageIdentifier": "Git.Git"},
-                {"PackageIdentifier": "GitHub.GitHubDesktop"},
-
                 {"PackageIdentifier": "SlackTechnologies.Slack"},
+                {"PackageIdentifier": "Netsoft.Hubstaff"},
+                {"PackageIdentifier": "AnyDesk.AnyDesk"},
                 {"PackageIdentifier": "Zoom.Zoom"},
                 {"PackageIdentifier": "Microsoft.Teams"},
 

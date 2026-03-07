@@ -2,11 +2,9 @@
 
 > Automated Windows 11 provisioning — from bare metal to ready-to-use in one boot. No clicking through OOBE, no OEM bloat, no Microsoft account required.
 
-Made with ♥️ 🇭🇹 
-
 ---
 
-## 🗺️ Overview
+## Overview
 
 This project gives you **two ways** to provision a fresh Windows 11 machine with apps, security settings, VPN, and user accounts — all scripted, all repeatable.
 
@@ -154,7 +152,6 @@ cd C:\path\to\Setup
 |---|---|
 | 🌐 Browser | Google Chrome, Mozilla Firefox |
 | 💬 Comms | Slack, Zoom, Microsoft Teams |
-| 🛠️ Dev | VS Code, Git, GitHub Desktop |
 | 🔧 Utilities | 7-Zip, Notepad++, VLC |
 | 🔒 Security | Malwarebytes, Tailscale |
 | 🖥️ Hardware | Dell Command Update |
