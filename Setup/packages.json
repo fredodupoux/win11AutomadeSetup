@@ -26,7 +26,7 @@
                 {"PackageIdentifier": "Notepad++.Notepad++"},
                 {"PackageIdentifier": "VideoLAN.VLC"},
 
-                {"PackageIdentifier": "Malwarebytes.Malwarebytes"},
+                {"PackageIdentifier": "Bitdefender.Bitdefender"},
 
                 {"PackageIdentifier": "Dell.CommandUpdate"}
             ]

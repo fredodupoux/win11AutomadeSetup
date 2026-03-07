@@ -27,15 +27,46 @@ Write-Host "     Windows 11 Provisioning Script"
 Write-Host "============================================"
 Write-Host ""
 
-# 1.1 Package file name
-$PackageFile = Read-Host "Enter package file name (default: packages.json)"
-if ([string]::IsNullOrWhiteSpace($PackageFile)) { $PackageFile = "packages.json" }
+# Load config.ps1 if it exists alongside this script.
+# config.ps1 can pre-set $Config_TailscaleAuthKey and $Config_PackageFile
+# so the IT admin is never prompted to type long values manually.
+$ConfigFile = Join-Path $PSScriptRoot "config.ps1"
+$Config_PackageFile    = ""
+$Config_TailscaleAuthKey = ""
+$Config_ComputerName   = ""
+$Config_ITAdminToHide  = ""
+$Config_NewUsername    = ""
+$Config_NewFullName    = ""
+$Config_NewPassword    = ""
+$Config_NewUserIsAdmin = $false
+if (Test-Path $ConfigFile) {
+    . $ConfigFile
+    Write-Host "[OK] Loaded config.ps1"
+} else {
+    Write-Host "[INFO] No config.ps1 found — will prompt for all values"
+}
+Write-Host ""
 
-# 1.2 Tailscale auth key (optional, input hidden)
-$TailscaleAuthKeySecure = Read-Host "Enter Tailscale auth key (leave empty to skip)" -AsSecureString
-$TailscaleAuthKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TailscaleAuthKeySecure)
-)
+# 1.1 Package file name — use config value or prompt
+if (-not [string]::IsNullOrWhiteSpace($Config_PackageFile)) {
+    $PackageFile = $Config_PackageFile
+    Write-Host "Package file (from config): $PackageFile"
+} else {
+    $PackageFile = Read-Host "Enter package file name (default: packages.json)"
+    if ([string]::IsNullOrWhiteSpace($PackageFile)) { $PackageFile = "packages.json" }
+}
+
+# 1.2 Tailscale auth key — use config value or prompt
+if (-not [string]::IsNullOrWhiteSpace($Config_TailscaleAuthKey)) {
+    $TailscaleAuthKey = $Config_TailscaleAuthKey
+    Write-Host "Tailscale auth key (from config): loaded"
+    $Config_TailscaleAuthKey = $null  # clear from config variable immediately
+} else {
+    $TailscaleAuthKeySecure = Read-Host "Enter Tailscale auth key (leave empty to skip)" -AsSecureString
+    $TailscaleAuthKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TailscaleAuthKeySecure)
+    )
+}
 
 # ================================================================
 # PHASE 2: Logging Setup
@@ -166,7 +197,12 @@ $NewComputerName      = ""
 # ------------------------------------------------------------------
 # 7.1 Hide IT Admin Account from login screen
 # ------------------------------------------------------------------
-$ITAdminUser = Read-Host "Enter IT admin username to hide from login screen (leave empty to skip)"
+if (-not [string]::IsNullOrWhiteSpace($Config_ITAdminToHide)) {
+    $ITAdminUser = $Config_ITAdminToHide
+    Write-Host "IT admin to hide (from config): $ITAdminUser"
+} else {
+    $ITAdminUser = Read-Host "Enter IT admin username to hide from login screen (leave empty to skip)"
+}
 
 if (-not [string]::IsNullOrWhiteSpace($ITAdminUser)) {
     $UserExists = Get-LocalUser -Name $ITAdminUser -ErrorAction SilentlyContinue
@@ -196,7 +232,12 @@ if (-not [string]::IsNullOrWhiteSpace($ITAdminUser)) {
 Write-Host ""
 Write-Host "Current computer name: $env:COMPUTERNAME"
 Write-Host "Naming rules: max 15 characters, letters/numbers/hyphens only, no spaces"
-$NewComputerName = Read-Host "Enter new computer name (leave empty to skip)"
+if (-not [string]::IsNullOrWhiteSpace($Config_ComputerName)) {
+    $NewComputerName = $Config_ComputerName
+    Write-Host "Computer name (from config): $NewComputerName"
+} else {
+    $NewComputerName = Read-Host "Enter new computer name (leave empty to skip)"
+}
 
 if (-not [string]::IsNullOrWhiteSpace($NewComputerName)) {
     # Validate: strip invalid characters to a safe name and warn if changed
@@ -214,33 +255,64 @@ if (-not [string]::IsNullOrWhiteSpace($NewComputerName)) {
 # 7.3 Create End User Account
 # ------------------------------------------------------------------
 Write-Host ""
-$CreateUser = Read-Host "Create a new end user account? (y/N)"
 
-if ($CreateUser -ieq 'y') {
-    $NewUsername = Read-Host "Enter username"
-    $NewFullName = Read-Host "Enter full name"
+# Determine if user creation is driven by config or interactive
+$ConfigHasUser = (-not [string]::IsNullOrWhiteSpace($Config_NewUsername)) -and
+                 (-not [string]::IsNullOrWhiteSpace($Config_NewFullName))
 
-    # Collect and confirm password without echoing it
-    $NewPasswordSecure  = Read-Host "Enter password" -AsSecureString
-    $NewPasswordConfirm = Read-Host "Confirm password" -AsSecureString
+if ($ConfigHasUser) {
+    Write-Host "End user account (from config): $Config_NewUsername / $Config_NewFullName"
+    $DoCreateUser = $true
+} else {
+    $DoCreateUser = (Read-Host "Create a new end user account? (y/N)") -ieq 'y'
+}
 
-    $Pwd1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordSecure))
-    $Pwd2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordConfirm))
+if ($DoCreateUser) {
+    # Username and full name — config or prompt
+    if ($ConfigHasUser) {
+        $NewUsername = $Config_NewUsername
+        $NewFullName = $Config_NewFullName
+    } else {
+        $NewUsername = Read-Host "Enter username"
+        $NewFullName = Read-Host "Enter full name"
+    }
 
-    if ($Pwd1 -ne $Pwd2) {
+    # Password — config or prompt (with confirmation)
+    if (-not [string]::IsNullOrWhiteSpace($Config_NewPassword)) {
+        $NewPasswordSecure = ConvertTo-SecureString $Config_NewPassword -AsPlainText -Force
+        $Config_NewPassword = $null  # clear from memory immediately
+        $PasswordsMatch = $true
+    } else {
+        $NewPasswordSecure  = Read-Host "Enter password" -AsSecureString
+        $NewPasswordConfirm = Read-Host "Confirm password" -AsSecureString
+
+        $Pwd1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordSecure))
+        $Pwd2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordConfirm))
+        $PasswordsMatch = ($Pwd1 -eq $Pwd2)
+        $Pwd1 = $null
+        $Pwd2 = $null
+    }
+
+    if (-not $PasswordsMatch) {
         Write-Warning "Passwords do not match. Skipping user creation."
     } else {
         New-LocalUser `
-            -Name          $NewUsername `
-            -Password      $NewPasswordSecure `
-            -FullName      $NewFullName `
-            -Description   "End user account" `
+            -Name                $NewUsername `
+            -Password            $NewPasswordSecure `
+            -FullName            $NewFullName `
+            -Description         "End user account" `
             -PasswordNeverExpires:$false | Out-Null
 
-        $MakeAdmin = Read-Host "Add '$NewUsername' to Administrators group? (y/N)"
-        if ($MakeAdmin -ieq 'y') {
+        # Admin group — config or prompt
+        if ($ConfigHasUser) {
+            $MakeAdmin = $Config_NewUserIsAdmin
+        } else {
+            $MakeAdmin = (Read-Host "Add '$NewUsername' to Administrators group? (y/N)") -ieq 'y'
+        }
+
+        if ($MakeAdmin) {
             Add-LocalGroupMember -Group "Administrators" -Member $NewUsername
             Write-Host "[OK] '$NewUsername' created and added to Administrators"
         } else {
@@ -251,9 +323,6 @@ if ($CreateUser -ieq 'y') {
         $ConfiguredNewUser = $NewUsername
     }
 
-    # Clear passwords from memory
-    $Pwd1 = $null
-    $Pwd2 = $null
     [System.GC]::Collect()
 }
 Write-Host ""

@@ -1,1 +1,11 @@
 Provisionning_Guide.md
+
+# Local config — contains secrets, never commit
+Setup/config.ps1
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
+Desktop.ini

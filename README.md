@@ -22,9 +22,12 @@ This project gives you **two ways** to provision a fresh Windows 11 machine with
 
 ```
 win11AutomadeSetup/
-├── autounattend.xml     # Unattended answer file (Option A — USB reinstall)
-├── Setup.ps1            # Provisioning script (both options)
-├── packages.json        # App list for winget
+├── autounattend.xml          # Unattended answer file (Option A — USB reinstall)
+├── Setup/
+│   ├── Setup.ps1             # Provisioning script (both options)
+│   ├── packages.json         # App list for winget
+│   ├── config.example.ps1   # Config template — copy to config.ps1 and fill in
+│   └── config.ps1            # Your local secrets (gitignored, never committed)
 └── README.md
 ```
 
@@ -51,7 +54,9 @@ USB root/
 ├── autounattend.xml        ← copy here
 └── Setup/                  ← copy this folder
     ├── Setup.ps1
-    └── packages.json
+    ├── packages.json
+    ├── config.example.ps1
+    └── config.ps1          ← your secrets (filled in, never committed)
 ```
 
 #### Step 2 — Edit `autounattend.xml` before deploying
@@ -152,6 +157,8 @@ cd C:\path\to\Setup
 |---|---|
 | 🌐 Browser | Google Chrome, Mozilla Firefox |
 | 💬 Comms | Slack, Zoom, Microsoft Teams |
+| 🕐 Productivity | Hubstaff |
+| 🖥️ Remote Access | AnyDesk |
 | 🔧 Utilities | 7-Zip, Notepad++, VLC |
 | 🔒 Security | Malwarebytes, Tailscale |
 | 🖥️ Hardware | Dell Command Update |
