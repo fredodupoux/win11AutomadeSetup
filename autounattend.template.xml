@@ -1,32 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   ============================================================
-  Windows 11 Unattended Answer File
+  Windows 11 Unattended Answer File — TEMPLATE
   ============================================================
-  PURPOSE: Bypass OOBE, create local IT admin account,
-           auto-copy provisioning files from USB, launch Setup.ps1.
+  DO NOT use this file directly on a USB drive.
+  Run Build-USB.ps1 to generate autounattend.xml from config.ps1.
 
-  USB STRUCTURE REQUIRED:
+  Placeholders (substituted by Build-USB.ps1):
+    %%ORGANIZATION%%       Company/org name
+    %%TIMEZONE%%           Windows timezone string
+    %%WINDOWS_EDITION%%    "Windows 11 Pro" / "Windows 11 Home" / etc.
+    %%ITADMIN_USERNAME%%   Local IT admin account username
+    %%ITADMIN_DISPLAY%%    IT admin display name (full name)
+    %%ITADMIN_PASSWORD%%   IT admin account password (plain text on USB only)
+
+  USB STRUCTURE (after running Build-USB.ps1):
     USB root/
-    ├── autounattend.xml        (this file)
-    ├── [Windows 11 ISO files]  (sources/, boot/, efi/, etc.)
+    ├── autounattend.xml        (generated — not this template)
+    ├── [Windows 11 ISO files]
     └── Setup/
         ├── Setup.ps1
-        └── packages.json
-
-  HOW TO CREATE THE USB:
-    1. Use Rufus (https://rufus.ie) to write the Windows 11 ISO to USB
-       - Partition scheme: GPT
-       - Target system: UEFI (non-CSM)
-       - Leave all other defaults
-    2. Copy this file (autounattend.xml) to the root of the USB
-    3. Copy the Setup\ folder to the root of the USB
-
-  BEFORE DEPLOYING - CHANGE THESE:
-    - ITAdmin password (search for CHANGEME_AdminPassword1!)
-    - TimeZone if not Eastern
-    - RegisteredOrganization if needed
-    - Windows edition in ImageInstall (Home vs Pro)
+        ├── packages.json
+        ├── config.example.ps1
+        └── config.ps1          (your secrets — gitignored)
 
   DELL OPTIPLEX 3070/5070 MFF NOTES:
     - No driver injection needed. Windows 11 inbox drivers cover
@@ -69,8 +65,8 @@
 
       <UserData>
         <AcceptEula>true</AcceptEula>
-        <FullName>IT Admin</FullName>
-        <Organization>Zaboka Systems</Organization>
+        <FullName>%%ITADMIN_DISPLAY%%</FullName>
+        <Organization>%%ORGANIZATION%%</Organization>
         <!--
           Product key: remove this block to use the OEM digital license
           embedded in the device firmware (standard on Dell retail units).
@@ -156,7 +152,7 @@
           <InstallFrom>
             <MetaData wcm:action="add">
               <Key>/IMAGE/NAME</Key>
-              <Value>Windows 11 Pro</Value>
+              <Value>%%WINDOWS_EDITION%%</Value>
             </MetaData>
           </InstallFrom>
         </OSImage>
@@ -180,12 +176,12 @@
                language="neutral"
                versionScope="nonSxS">
       <!--
-        Temporary name — Setup.ps1 will prompt to rename interactively.
-        Use * to let Windows generate a random name (e.g. DESKTOP-XXXXXX).
+        Temporary name used only during installation.
+        Setup.ps1 renames the machine to its real name on first run.
       -->
       <ComputerName>WIN11-SETUP</ComputerName>
-      <TimeZone>Eastern Standard Time</TimeZone>
-      <RegisteredOrganization>Zaboka Systems</RegisteredOrganization>
+      <TimeZone>%%TIMEZONE%%</TimeZone>
+      <RegisteredOrganization>%%ORGANIZATION%%</RegisteredOrganization>
     </component>
 
     <component name="Microsoft-Windows-Deployment"
@@ -199,7 +195,6 @@
           Scan all drive letters for the Setup\ folder (identified by
           the presence of Setup\Setup.ps1). Copies it to C:\Setup so
           it persists after the USB is removed.
-          Uses PowerShell — available during specialize pass.
         -->
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
@@ -235,9 +230,8 @@
 
       <!-- ====================================================
            OOBE BYPASS
-           HideOnlineAccountScreens is the key setting that
-           forces the local account path on Windows 11 Pro,
-           bypassing the Microsoft account requirement entirely.
+           HideOnlineAccountScreens forces the local account path
+           on Windows 11 Pro, bypassing Microsoft account entirely.
            ==================================================== -->
       <OOBE>
         <HideEULAPage>true</HideEULAPage>
@@ -254,22 +248,17 @@
 
       <!-- ====================================================
            IT ADMIN LOCAL ACCOUNT
-           Created during OOBE — no Microsoft account needed.
-
-           SECURITY: Change CHANGEME_AdminPassword1! before deploying.
-           This file sits on the USB in plain text. Use a temporary
-           password and rotate it once Setup.ps1 finishes, or use
-           Base64-encoded password format (see Microsoft docs on
-           Answer File security / offline password encoding).
+           Password comes from %%ITADMIN_PASSWORD%% — substituted
+           by Build-USB.ps1 at USB prep time, never stored in git.
            ==================================================== -->
       <UserAccounts>
         <LocalAccounts>
           <LocalAccount wcm:action="add">
-            <Name>ITAdmin</Name>
-            <DisplayName>IT Admin</DisplayName>
+            <Name>%%ITADMIN_USERNAME%%</Name>
+            <DisplayName>%%ITADMIN_DISPLAY%%</DisplayName>
             <Group>Administrators</Group>
             <Password>
-              <Value>CHANGEME_AdminPassword1!</Value>
+              <Value>%%ITADMIN_PASSWORD%%</Value>
               <PlainText>true</PlainText>
             </Password>
           </LocalAccount>
@@ -278,16 +267,15 @@
 
       <!-- ====================================================
            AUTO LOGON (one time only)
-           Logs in as ITAdmin automatically so Setup.ps1 runs
-           on first boot without anyone touching the keyboard.
-           LogonCount=1 means subsequent logins require password.
+           Logs in as the IT admin so Setup.ps1 runs on first boot.
+           LogonCount=1 — subsequent logins require password.
            ==================================================== -->
       <AutoLogon>
         <Enabled>true</Enabled>
-        <Username>ITAdmin</Username>
+        <Username>%%ITADMIN_USERNAME%%</Username>
         <LogonCount>1</LogonCount>
         <Password>
-          <Value>CHANGEME_AdminPassword1!</Value>
+          <Value>%%ITADMIN_PASSWORD%%</Value>
           <PlainText>true</PlainText>
         </Password>
       </AutoLogon>
@@ -295,8 +283,7 @@
       <!-- ====================================================
            LAUNCH Setup.ps1 ON FIRST LOGIN
            Runs from C:\Setup (copied there during specialize).
-           -NoExit keeps the window open so the IT admin can
-           interact with prompts (computer name, user creation, etc.)
+           -NoExit keeps the window open for interactive prompts.
            ==================================================== -->
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">

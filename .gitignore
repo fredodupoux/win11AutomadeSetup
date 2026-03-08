@@ -3,6 +3,9 @@ Provisionning_Guide.md
 # Local config — contains secrets, never commit
 Setup/config.ps1
 
+# Generated file — contains plain-text password, never commit
+autounattend.xml
+
 # Logs
 *.log
 

@@ -4,53 +4,94 @@
 # HOW TO USE:
 #   1. Copy this file and rename the copy to: config.ps1
 #   2. Fill in your values below
-#   3. config.ps1 is gitignored — it will never be committed
+#   3. Run Build-USB.ps1 — it reads this file to generate
+#      autounattend.xml AND pre-fills Setup.ps1 variables
+#   4. config.ps1 is gitignored — it will never be committed
 #
-# Setup.ps1 loads config.ps1 automatically if it exists in the
-# same folder. Any value left empty ("") falls back to an
-# interactive prompt at runtime.
+# Any value left as "" falls back to an interactive prompt
+# at runtime (Setup.ps1 only — autounattend values are required).
 # ==============================================================
 
+
 # --------------------------------------------------------------
-# PACKAGE FILE
+# ORGANIZATION  [autounattend.xml + Setup.ps1]
+# --------------------------------------------------------------
+$Config_Organization = "Zaboka Systems"
+
+
+# --------------------------------------------------------------
+# WINDOWS EDITION  [autounattend.xml]
+# --------------------------------------------------------------
+# Must match exactly what is in the ISO image index.
+# Common values:
+#   "Windows 11 Home"
+#   "Windows 11 Pro"
+#   "Windows 11 Enterprise"
+$Config_WindowsEdition = "Windows 11 Pro"
+
+
+# --------------------------------------------------------------
+# TIMEZONE  [autounattend.xml]
+# --------------------------------------------------------------
+# Run this on any Windows machine to list valid values:
+#   Get-TimeZone -ListAvailable | Select-Object Id
+# Common values:
+#   "Eastern Standard Time"
+#   "Central Standard Time"
+#   "Mountain Standard Time"
+#   "Pacific Standard Time"
+#   "UTC"
+$Config_Timezone = "Eastern Standard Time"
+
+
+# --------------------------------------------------------------
+# IT ADMIN ACCOUNT  [autounattend.xml + Setup.ps1]
+# --------------------------------------------------------------
+# This account is created during OOBE and hidden from the login
+# screen after Setup.ps1 runs.
+$Config_ITAdminUsername    = "ITAdmin"
+$Config_ITAdminDisplayName = "IT Admin"
+
+# Password stored only on the USB — never committed to git.
+# Use a temporary password and rotate it after provisioning.
+$Config_ITAdminPassword    = ""
+
+
+# --------------------------------------------------------------
+# PACKAGE FILE  [Setup.ps1]
 # --------------------------------------------------------------
 # Leave empty to default to packages.json
 $Config_PackageFile = ""
 
+
 # --------------------------------------------------------------
-# TAILSCALE
+# TAILSCALE  [Setup.ps1]
 # --------------------------------------------------------------
 # Generate a reusable, pre-authorized key at:
 # https://login.tailscale.com/admin/settings/keys
 $Config_TailscaleAuthKey = ""
 
+
 # --------------------------------------------------------------
-# COMPUTER NAME
+# COMPUTER NAME  [Setup.ps1]
 # --------------------------------------------------------------
 # Max 15 characters, letters/numbers/hyphens only, no spaces.
 # Leave empty to be prompted at runtime.
 $Config_ComputerName = ""
 
-# --------------------------------------------------------------
-# IT ADMIN ACCOUNT — hide from login screen
-# --------------------------------------------------------------
-# Username of the IT admin account to hide (e.g. "ITAdmin").
-# Leave empty to be prompted at runtime.
-$Config_ITAdminToHide = ""
 
 # --------------------------------------------------------------
-# END USER ACCOUNT
+# END USER ACCOUNT  [Setup.ps1]
 # --------------------------------------------------------------
 # Leave all empty to be prompted at runtime.
-# If any one field is empty the script will prompt for all of them.
-
-$Config_NewUsername = ""
-$Config_NewFullName = ""
+# If any one of username/fullname is empty, all will be prompted.
+$Config_NewUsername    = ""
+$Config_NewFullName    = ""
 
 # Plain-text password — stored only on the USB, never committed.
-# Leave empty to be prompted (recommended for shared config files).
-$Config_NewPassword = ""
+# Leave empty to prompt at runtime (recommended for shared configs).
+$Config_NewPassword    = ""
 
-# Set to $true to add the new user to Administrators group,
-# $false for a standard user account.
+# $true  = add to Administrators group
+# $false = standard user account
 $Config_NewUserIsAdmin = $false
