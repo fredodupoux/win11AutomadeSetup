@@ -46,23 +46,44 @@ $Config_NewUserIsAdmin     = $false
 Write-Host "[OK] Loaded config.ps1"
 
 # --------------------------------------------------------------
-# Validate required fields
+# Prompt for any missing required values
 # --------------------------------------------------------------
-$Errors = @()
+Write-Host ""
 
-if ([string]::IsNullOrWhiteSpace($Config_Organization))    { $Errors += "Config_Organization is required" }
-if ([string]::IsNullOrWhiteSpace($Config_WindowsEdition))  { $Errors += "Config_WindowsEdition is required" }
-if ([string]::IsNullOrWhiteSpace($Config_Timezone))        { $Errors += "Config_Timezone is required" }
-if ([string]::IsNullOrWhiteSpace($Config_ITAdminUsername)) { $Errors += "Config_ITAdminUsername is required" }
-if ([string]::IsNullOrWhiteSpace($Config_ITAdminPassword)) { $Errors += "Config_ITAdminPassword is required (needed for autounattend.xml)" }
-
-if ($Errors.Count -gt 0) {
-    Write-Host ""
-    Write-Host "ERROR: Missing required values in config.ps1:" -ForegroundColor Red
-    $Errors | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
-    Write-Host ""
-    exit 1
+function Read-Required {
+    param([string]$Prompt, [string]$Current)
+    if (-not [string]::IsNullOrWhiteSpace($Current)) { return $Current }
+    do { $val = Read-Host $Prompt } while ([string]::IsNullOrWhiteSpace($val))
+    return $val
 }
+
+function Read-RequiredSecret {
+    param([string]$Prompt, [string]$Current)
+    if (-not [string]::IsNullOrWhiteSpace($Current)) { return $Current }
+    do {
+        $secure = Read-Host $Prompt -AsSecureString
+        $val = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    } while ([string]::IsNullOrWhiteSpace($val))
+    return $val
+}
+
+function Read-WithDefault {
+    param([string]$Prompt, [string]$Current, [string]$Default)
+    if (-not [string]::IsNullOrWhiteSpace($Current)) { return $Current }
+    $val = Read-Host "$Prompt (default: $Default)"
+    if ([string]::IsNullOrWhiteSpace($val)) { return $Default }
+    return $val
+}
+
+$Config_Organization       = Read-Required      "Organization name"                         $Config_Organization
+$Config_WindowsEdition     = Read-WithDefault   "Windows edition"                           $Config_WindowsEdition     "Windows 11 Pro"
+$Config_Timezone           = Read-WithDefault   "Timezone"                                  $Config_Timezone           "Eastern Standard Time"
+$Config_ITAdminUsername    = Read-WithDefault   "IT admin username"                         $Config_ITAdminUsername    "ITAdmin"
+$Config_ITAdminDisplayName = Read-WithDefault   "IT admin display name"                     $Config_ITAdminDisplayName "IT Admin"
+$Config_ITAdminPassword    = Read-RequiredSecret "IT admin password (hidden)"               $Config_ITAdminPassword
+
+Write-Host ""
 
 # --------------------------------------------------------------
 # Read template and substitute placeholders
