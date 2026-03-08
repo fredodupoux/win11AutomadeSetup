@@ -1,15 +1,15 @@
 # ==============================================================
-# config.ps1 — Local provisioning configuration
+# config.ps1 - Local provisioning configuration
 # ==============================================================
 # HOW TO USE:
 #   1. Copy this file and rename the copy to: config.ps1
 #   2. Fill in your values below
-#   3. Run Build-USB.ps1 — it reads this file to generate
+#   3. Run Build-USB.ps1 - it reads this file to generate
 #      autounattend.xml AND pre-fills Setup.ps1 variables
-#   4. config.ps1 is gitignored — it will never be committed
+#   4. config.ps1 is gitignored - it will never be committed
 #
 # Any value left as "" falls back to an interactive prompt
-# at runtime (Setup.ps1 only — autounattend values are required).
+# at runtime (Setup.ps1 only - autounattend values are required).
 # ==============================================================
 
 
@@ -52,7 +52,7 @@ $Config_Timezone = "Eastern Standard Time"
 $Config_ITAdminUsername    = "itadmin"
 $Config_ITAdminDisplayName = "IT Admin"
 
-# Password stored only on the USB — never committed to git.
+# Password stored only on the USB - never committed to git.
 # Use a temporary password and rotate it after provisioning.
 $Config_ITAdminPassword    = ""
 
@@ -97,7 +97,7 @@ $Config_ComputerName = ""
 $Config_NewUsername    = ""
 $Config_NewFullName    = ""
 
-# Plain-text password — stored only on the USB, never committed.
+# Plain-text password - stored only on the USB, never committed.
 # Leave empty to prompt at runtime (recommended for shared configs).
 $Config_NewPassword    = ""
 

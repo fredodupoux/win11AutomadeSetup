@@ -1,5 +1,6 @@
 Provisionning_Guide.md
 .DS_Store
+.vscode/
 # Local config — contains secrets, never commit
 Setup/config.ps1
 

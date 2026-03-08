@@ -1,6 +1,5 @@
 {
     "$schema": "https://aka.ms/winget-packages.schema.2.0.json",
-    "WinGetVersion": "1.6.0",
     "CreationDate": "2025-01-01",
     "Sources": [
         {

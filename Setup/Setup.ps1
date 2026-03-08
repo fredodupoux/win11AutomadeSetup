@@ -18,9 +18,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Unblock all files in the Setup folder — Windows flags files copied
+# Unblock all files in the Setup folder - Windows flags files copied
 # from USB drives as potentially unsafe, which blocks dot-sourcing.
-Get-ChildItem -Path $PSScriptRoot -File | Unblock-File -ErrorAction SilentlyContinue
+Get-ChildItem -Path $PSScriptRoot -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
 
 # ================================================================
 # PHASE 1: Configuration Collection
@@ -56,11 +56,11 @@ if (Test-Path $ConfigFile) {
         Write-Warning "Continuing with interactive prompts for all values."
     }
 } else {
-    Write-Host "[INFO] No config.ps1 found — will prompt for all values"
+    Write-Host "[INFO] No config.ps1 found - will prompt for all values"
 }
 Write-Host ""
 
-# 1.1 Package file name — use config value or prompt
+# 1.1 Package file name - use config value or prompt
 if (-not [string]::IsNullOrWhiteSpace($Config_PackageFile)) {
     $PackageFile = $Config_PackageFile
     Write-Host "Package file (from config): $PackageFile"
@@ -69,7 +69,7 @@ if (-not [string]::IsNullOrWhiteSpace($Config_PackageFile)) {
     if ([string]::IsNullOrWhiteSpace($PackageFile)) { $PackageFile = "packages.json" }
 }
 
-# 1.2 Tailscale auth key — use config value or prompt
+# 1.2 Tailscale auth key - use config value or prompt
 if (-not [string]::IsNullOrWhiteSpace($Config_TailscaleAuthKey)) {
     $TailscaleAuthKey = $Config_TailscaleAuthKey
     Write-Host "Tailscale auth key (from config): loaded"
@@ -215,18 +215,27 @@ if (-not [string]::IsNullOrEmpty($TailscaleAuthKey)) {
     # Give the service a moment to start
     Start-Sleep -Seconds 5
 
-    # Find Tailscale executable (location can vary)
-    $TailscalePath = @(
-        "C:\Program Files\Tailscale\tailscale.exe",
-        "C:\Program Files (x86)\Tailscale\tailscale.exe"
-    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    # Find Tailscale executable - check PATH first, then common install locations
+    $TailscalePath = (Get-Command tailscale -ErrorAction SilentlyContinue)?.Source
+    if (-not $TailscalePath) {
+        $TailscalePath = @(
+            "C:\Program Files\Tailscale\tailscale.exe",
+            "C:\Program Files (x86)\Tailscale\tailscale.exe",
+            "$env:ProgramFiles\Tailscale\tailscale.exe"
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    if (-not $TailscalePath) {
+        # Last resort - search Program Files
+        $TailscalePath = Get-ChildItem -Path "C:\Program Files" -Filter "tailscale.exe" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
 
     if ($TailscalePath) {
-        Write-Host "Authenticating Tailscale..."
+        Write-Host "Authenticating Tailscale at: $TailscalePath"
         & $TailscalePath up --authkey="$TailscaleAuthKey"
         Write-Host "[OK] Tailscale connected"
     } else {
-        Write-Warning "Tailscale installed but executable not found at expected path. Authenticate manually."
+        Write-Warning "Tailscale installed but tailscale.exe not found. Open Tailscale from the system tray to authenticate manually."
     }
 
     # Clear sensitive variable from memory
@@ -248,7 +257,7 @@ $PackagePath = Join-Path $ScriptDir $PackageFile
 
 if (Test-Path $PackagePath) {
     Write-Host "Installing applications from $PackageFile..."
-    winget import --import-file $PackagePath --accept-source-agreements --accept-package-agreements
+    winget import --import-file $PackagePath --accept-source-agreements --accept-package-agreements --ignore-unavailable
     Write-Host "[OK] Applications installed"
 } else {
     Write-Warning "Package file not found: $PackagePath"
@@ -342,7 +351,7 @@ if ($ConfigHasUser) {
 }
 
 if ($DoCreateUser) {
-    # Username and full name — config or prompt
+    # Username and full name - config or prompt
     if ($ConfigHasUser) {
         $NewUsername = $Config_NewUsername
         $NewFullName = $Config_NewFullName
@@ -351,7 +360,7 @@ if ($DoCreateUser) {
         $NewFullName = Read-Host "Enter full name"
     }
 
-    # Password — config or prompt (with confirmation)
+    # Password - config or prompt (with confirmation)
     if (-not [string]::IsNullOrWhiteSpace($Config_NewPassword)) {
         $NewPasswordSecure = ConvertTo-SecureString $Config_NewPassword -AsPlainText -Force
         $Config_NewPassword = $null  # clear from memory immediately
@@ -379,7 +388,7 @@ if ($DoCreateUser) {
             -Description         "End user account" `
             -PasswordNeverExpires:$false | Out-Null
 
-        # Admin group — config or prompt
+        # Admin group - config or prompt
         if ($ConfigHasUser) {
             $MakeAdmin = $Config_NewUserIsAdmin
         } else {
@@ -424,41 +433,11 @@ powercfg /SETDCVALUEINDEX SCHEME_CURRENT SUB_NONE CONSOLELOCK 1  # on battery
 powercfg /S SCHEME_CURRENT
 Write-Host "[OK] Screen lock: password required on wake"
 
-# 8.4 Disable Remote Desktop and Remote Assistance
-Set-ItemProperty `
-    -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
-    -Name "fDenyTSConnections" -Value 1
-Set-ItemProperty `
-    -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Remote Assistance" `
-    -Name "fAllowToGetHelp" -Value 0
-# Also disable via firewall rule for defence-in-depth
-Disable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-Write-Host "[OK] Remote Desktop and Remote Assistance: disabled"
 
 # 8.5 Disable SMBv1 (legacy protocol, high attack surface)
 Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force
 Write-Host "[OK] SMBv1: disabled"
 
-# 8.6 Enable BitLocker (TPM-only, silent encryption) - Pro/Enterprise only
-$BitLockerAvailable = (Get-Command Enable-BitLocker -ErrorAction SilentlyContinue) -ne $null
-$IsPro = (Get-WindowsEdition -Online).Edition -match "Pro|Enterprise|Education"
-
-if ($BitLockerAvailable -and $IsPro) {
-    $BLStatus = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
-    if ($BLStatus -eq "FullyDecrypted") {
-        Write-Host "Enabling BitLocker on C: ..."
-        Enable-BitLocker -MountPoint "C:" -TpmProtector -EncryptionMethod XtsAes256 -SkipHardwareTest
-        Write-Host "[OK] BitLocker: encryption started on C:"
-    } elseif ($BLStatus -eq "FullyEncrypted") {
-        Write-Host "[OK] BitLocker: already enabled on C:"
-    } else {
-        Write-Host "[INFO] BitLocker status: $BLStatus (no action taken)"
-    }
-} else {
-    Write-Host "[INFO] BitLocker: skipped (requires Pro/Enterprise edition)"
-}
-
-Write-Host ""
 
 # ================================================================
 # PHASE 9: Cleanup and Summary
@@ -486,18 +465,6 @@ if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
 Write-Host "  [OK] Security hardening applied"
 Write-Host ""
 
-# Offer to delete setup folder
-$DeleteScript = Read-Host "Delete the setup folder (C:\Setup or script directory)? (y/N)"
-if ($DeleteScript -ieq 'y') {
-    Stop-Transcript
-    # Small delay so transcript file is released before deletion
-    Start-Sleep -Seconds 1
-    Remove-Item -Path $ScriptDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Setup folder removed."
-} else {
-    Stop-Transcript
-    Write-Host "Setup folder kept at: $ScriptDir"
-}
 
 # Prompt for restart (needed for computer rename + BitLocker init)
 if ($RenameRequired) {
