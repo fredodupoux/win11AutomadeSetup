@@ -195,18 +195,22 @@
           Scan all drive letters for the Setup\ folder (identified by
           the presence of Setup\Setup.ps1). Copies it to C:\Setup so
           it persists after the USB is removed.
+
+          IMPORTANT: Both commands are wrapped in try/catch and always
+          exit 0. A failure here must never abort Windows Setup — the
+          IT admin can copy the Setup folder manually if needed.
         -->
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
           <Description>Copy provisioning files from USB to C:\Setup</Description>
-          <Path>powershell.exe -NonInteractive -Command "foreach ($drive in [System.IO.DriveInfo]::GetDrives()) { $marker = [IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup', 'Setup.ps1'); if (Test-Path $marker) { Copy-Item -Path ([IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup')) -Destination 'C:\' -Recurse -Force; break } }"</Path>
+          <Path>powershell.exe -NonInteractive -Command "try { foreach ($drive in [System.IO.DriveInfo]::GetDrives()) { $marker = [IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup', 'Setup.ps1'); if (Test-Path $marker) { Copy-Item -Path ([IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup')) -Destination 'C:\' -Recurse -Force; break } } } catch {} ; exit 0"</Path>
         </RunSynchronousCommand>
 
         <!-- Set PowerShell execution policy so Setup.ps1 can run -->
         <RunSynchronousCommand wcm:action="add">
           <Order>2</Order>
           <Description>Allow PowerShell script execution</Description>
-          <Path>powershell.exe -NonInteractive -Command "Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force"</Path>
+          <Path>powershell.exe -NonInteractive -Command "try { Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force } catch {} ; exit 0"</Path>
         </RunSynchronousCommand>
 
       </RunSynchronous>
