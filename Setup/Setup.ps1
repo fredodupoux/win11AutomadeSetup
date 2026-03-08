@@ -18,6 +18,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Unblock all files in the Setup folder — Windows flags files copied
+# from USB drives as potentially unsafe, which blocks dot-sourcing.
+Get-ChildItem -Path $PSScriptRoot -File | Unblock-File -ErrorAction SilentlyContinue
+
 # ================================================================
 # PHASE 1: Configuration Collection
 # ================================================================
@@ -42,8 +46,15 @@ $Config_NewFullName    = ""
 $Config_NewPassword    = ""
 $Config_NewUserIsAdmin = $false
 if (Test-Path $ConfigFile) {
-    . $ConfigFile
-    Write-Host "[OK] Loaded config.ps1"
+    # Unblock the file in case Windows flagged it from USB/download
+    Unblock-File -Path $ConfigFile -ErrorAction SilentlyContinue
+    try {
+        . $ConfigFile
+        Write-Host "[OK] Loaded config.ps1"
+    } catch {
+        Write-Warning "config.ps1 found but failed to load: $_"
+        Write-Warning "Continuing with interactive prompts for all values."
+    }
 } else {
     Write-Host "[INFO] No config.ps1 found — will prompt for all values"
 }

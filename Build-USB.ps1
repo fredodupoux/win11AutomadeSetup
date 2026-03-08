@@ -20,6 +20,10 @@ $ErrorActionPreference = "Stop"
 $ScriptDir  = $PSScriptRoot
 $ConfigFile = Join-Path $ScriptDir "Setup\config.ps1"
 
+# Unblock all files in the repo folder — Windows flags files cloned
+# from Git or copied from USB as potentially unsafe.
+Get-ChildItem -Path $ScriptDir -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+
 Write-Host ""
 Write-Host "============================================"
 Write-Host "     win11AutomadeSetup — Build USB"
