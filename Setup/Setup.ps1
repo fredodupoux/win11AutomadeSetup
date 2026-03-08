@@ -32,6 +32,8 @@ Write-Host ""
 # so the IT admin is never prompted to type long values manually.
 $ConfigFile = Join-Path $PSScriptRoot "config.ps1"
 $Config_PackageFile    = ""
+$Config_WifiSSID       = ""
+$Config_WifiPassword   = ""
 $Config_TailscaleAuthKey = ""
 $Config_ComputerName   = ""
 $Config_ITAdminToHide  = ""
@@ -126,10 +128,74 @@ winget source update
 Write-Host ""
 
 # ================================================================
-# PHASE 5: VPN / Network Setup (Optional)
+# PHASE 5: WiFi Setup (Optional)
 # ================================================================
 
-Write-Host "--- Phase 5: VPN Setup ---"
+Write-Host "--- Phase 5: WiFi Setup ---"
+
+if (-not [string]::IsNullOrWhiteSpace($Config_WifiSSID)) {
+    $WifiSSID     = $Config_WifiSSID
+    $WifiPassword = $Config_WifiPassword
+} else {
+    $WifiSSID = Read-Host "WiFi SSID (leave empty to skip)"
+    if (-not [string]::IsNullOrWhiteSpace($WifiSSID)) {
+        $WifiPassword = Read-Host "WiFi password"
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($WifiSSID)) {
+    Write-Host "Configuring WiFi profile for: $WifiSSID"
+
+    # Build a WPA2-Personal (WPA2PSK/AES) profile XML
+    $WifiProfileXml = @"
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>$WifiSSID</name>
+    <SSIDConfig>
+        <SSID>
+            <name>$WifiSSID</name>
+        </SSID>
+    </SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>auto</connectionMode>
+    <MSM>
+        <security>
+            <authEncryption>
+                <authentication>WPA2PSK</authentication>
+                <encryption>AES</encryption>
+                <useOneX>false</useOneX>
+            </authEncryption>
+            <sharedKey>
+                <keyType>passPhrase</keyType>
+                <protected>false</protected>
+                <keyMaterial>$WifiPassword</keyMaterial>
+            </sharedKey>
+        </security>
+    </MSM>
+</WLANProfile>
+"@
+
+    $ProfilePath = "$env:TEMP\wifi-profile.xml"
+    [System.IO.File]::WriteAllText($ProfilePath, $WifiProfileXml, [System.Text.Encoding]::UTF8)
+
+    # Add profile for all users and connect
+    netsh wlan add profile filename="$ProfilePath" user=all | Out-Null
+    netsh wlan connect name="$WifiSSID" | Out-Null
+
+    Remove-Item $ProfilePath -Force
+    $WifiPassword = $null
+
+    Write-Host "[OK] WiFi profile added and connection initiated: $WifiSSID"
+} else {
+    Write-Host "WiFi: skipped"
+}
+Write-Host ""
+
+# ================================================================
+# PHASE 6: VPN / Network Setup (Optional)
+# ================================================================
+
+Write-Host "--- Phase 6: VPN Setup ---"
 
 if (-not [string]::IsNullOrEmpty($TailscaleAuthKey)) {
     Write-Host "Installing Tailscale..."
@@ -164,7 +230,7 @@ Write-Host ""
 # PHASE 6: Application Installation
 # ================================================================
 
-Write-Host "--- Phase 6: Application Installation ---"
+Write-Host "--- Phase 7: Application Installation ---"
 
 $ScriptDir = $PSScriptRoot
 $PackagePath = Join-Path $ScriptDir $PackageFile
@@ -183,7 +249,7 @@ Write-Host ""
 # PHASE 7: User Management
 # ================================================================
 
-Write-Host "--- Phase 7: User Management ---"
+Write-Host "--- Phase 8: User Management ---"
 
 # Track what was configured for the summary
 $ConfiguredITAdmin    = ""
@@ -328,7 +394,7 @@ Write-Host ""
 # PHASE 8: Security Configuration
 # ================================================================
 
-Write-Host "--- Phase 8: Security Configuration ---"
+Write-Host "--- Phase 9: Security Configuration ---"
 
 # 8.1 Enable Automatic Updates
 $WUPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"

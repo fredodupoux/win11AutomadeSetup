@@ -65,6 +65,15 @@ $Config_PackageFile = "packages.json"
 
 
 # --------------------------------------------------------------
+# WIFI  [Setup.ps1]
+# --------------------------------------------------------------
+# Configures a WPA2 WiFi profile so the machine connects
+# automatically on every boot. Leave both empty to skip.
+$Config_WifiSSID     = ""
+$Config_WifiPassword = ""
+
+
+# --------------------------------------------------------------
 # TAILSCALE  [Setup.ps1]
 # --------------------------------------------------------------
 # Generate a reusable, pre-authorized key at:

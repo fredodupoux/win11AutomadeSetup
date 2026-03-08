@@ -89,6 +89,8 @@ $Config_ITAdminUsername    = ""
 $Config_ITAdminDisplayName = ""
 $Config_ITAdminPassword    = ""
 $Config_PackageFile        = ""
+$Config_WifiSSID           = ""
+$Config_WifiPassword       = ""
 $Config_TailscaleAuthKey   = ""
 $Config_ComputerName       = ""
 $Config_NewUsername        = ""
@@ -159,8 +161,19 @@ $Config_PackageFile = Prompt-Value `
     -Current $Config_PackageFile `
     -Default "packages.json"
 
+$Config_WifiSSID = Prompt-Value `
+    -Label   "WiFi SSID" `
+    -Current $Config_WifiSSID `
+    -Note    "Company WiFi network name — leave blank to skip WiFi setup"
+
+if (-not [string]::IsNullOrWhiteSpace($Config_WifiSSID)) {
+    $Config_WifiPassword = Prompt-Secret `
+        -Label   "WiFi password" `
+        -Current $Config_WifiPassword
+}
+
 $Config_TailscaleAuthKey = Prompt-Secret `
-    -Label   "Tailscale auth key (hidden)" `
+    -Label   "Tailscale auth key" `
     -Current $Config_TailscaleAuthKey `
     -Note    "Generate at: https://login.tailscale.com/admin/settings/keys"
 
@@ -214,6 +227,8 @@ $configContent = @"
 
 # --- Setup.ps1 settings ---------------------------------------
 `$Config_PackageFile        = '$(Escape-PS1String $Config_PackageFile)'
+`$Config_WifiSSID           = '$(Escape-PS1String $Config_WifiSSID)'
+`$Config_WifiPassword       = '$(Escape-PS1String $Config_WifiPassword)'
 `$Config_TailscaleAuthKey   = '$(Escape-PS1String $Config_TailscaleAuthKey)'
 `$Config_ComputerName       = '$(Escape-PS1String $Config_ComputerName)'
 `$Config_NewUsername        = '$(Escape-PS1String $Config_NewUsername)'
@@ -265,6 +280,7 @@ Write-Host "  IT Admin user : $Config_ITAdminUsername"
 Write-Host "  IT Admin pass : (set)"
 Write-Host "  Computer name : $(if ($Config_ComputerName) { $Config_ComputerName } else { '(will prompt during setup)' })"
 Write-Host "  End user      : $(if ($Config_NewUsername) { $Config_NewUsername } else { '(will prompt during setup)' })"
+Write-Host "  WiFi SSID     : $(if ($Config_WifiSSID) { $Config_WifiSSID } else { '(skipped)' })"
 Write-Host "  Tailscale     : $(if ($Config_TailscaleAuthKey) { '(set)' } else { '(will prompt during setup)' })"
 Write-Host ""
 Write-Host "Next steps:"
