@@ -48,12 +48,12 @@ function Prompt-Value {
     return $val
 }
 
-# Same but hides input and re-prompts until something is entered (for required secrets).
+# Same as Prompt-Value but re-prompts until something is entered when required.
 function Prompt-Secret {
     param(
         [string]$Label,
         [string]$Current,
-        [string]$Note    = "",
+        [string]$Note     = "",
         [bool]  $Required = $false
     )
     if (-not [string]::IsNullOrWhiteSpace($Current)) { return $Current }
@@ -62,9 +62,7 @@ function Prompt-Secret {
     $hint = if ($Required) { " (required)" } else { " (optional — leave blank to prompt during Setup)" }
 
     while ($true) {
-        $secure = Read-Host "  $Label$hint" -AsSecureString
-        $val = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+        $val = Read-Host "  $Label$hint"
         if (-not $Required -or -not [string]::IsNullOrWhiteSpace($val)) { return $val }
         Write-Host "  This field is required — please enter a value." -ForegroundColor Yellow
     }

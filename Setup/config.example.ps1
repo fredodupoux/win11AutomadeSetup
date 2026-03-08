@@ -16,7 +16,7 @@
 # --------------------------------------------------------------
 # ORGANIZATION  [autounattend.xml + Setup.ps1]
 # --------------------------------------------------------------
-$Config_Organization = "Zaboka Systems"
+$Config_Organization = ""
 
 
 # --------------------------------------------------------------
@@ -49,7 +49,7 @@ $Config_Timezone = "Eastern Standard Time"
 # --------------------------------------------------------------
 # This account is created during OOBE and hidden from the login
 # screen after Setup.ps1 runs.
-$Config_ITAdminUsername    = "ITAdmin"
+$Config_ITAdminUsername    = "itadmin"
 $Config_ITAdminDisplayName = "IT Admin"
 
 # Password stored only on the USB — never committed to git.
@@ -61,7 +61,7 @@ $Config_ITAdminPassword    = ""
 # PACKAGE FILE  [Setup.ps1]
 # --------------------------------------------------------------
 # Leave empty to default to packages.json
-$Config_PackageFile = ""
+$Config_PackageFile = "packages.json"
 
 
 # --------------------------------------------------------------

@@ -62,10 +62,7 @@ if (-not [string]::IsNullOrWhiteSpace($Config_TailscaleAuthKey)) {
     Write-Host "Tailscale auth key (from config): loaded"
     $Config_TailscaleAuthKey = $null  # clear from config variable immediately
 } else {
-    $TailscaleAuthKeySecure = Read-Host "Enter Tailscale auth key (leave empty to skip)" -AsSecureString
-    $TailscaleAuthKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($TailscaleAuthKeySecure)
-    )
+    $TailscaleAuthKey = Read-Host "Enter Tailscale auth key (leave empty to skip)"
 }
 
 # ================================================================
