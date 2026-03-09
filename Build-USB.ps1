@@ -265,12 +265,15 @@ if (-not (Test-Path $TemplatePath)) {
 }
 
 $xml = Get-Content -Path $TemplatePath -Raw -Encoding UTF8
+$computerNameForXml = if ([string]::IsNullOrWhiteSpace($Config_ComputerName)) { "WIN11-SETUP" } else { $Config_ComputerName }
+
 $xml = $xml -replace '%%ORGANIZATION%%',      (Escape-XML $Config_Organization)
 $xml = $xml -replace '%%WINDOWS_EDITION%%',  (Escape-XML $Config_WindowsEdition)
 $xml = $xml -replace '%%TIMEZONE%%',         (Escape-XML $Config_Timezone)
 $xml = $xml -replace '%%ITADMIN_USERNAME%%', (Escape-XML $Config_ITAdminUsername)
 $xml = $xml -replace '%%ITADMIN_DISPLAY%%',  (Escape-XML $Config_ITAdminDisplayName)
 $xml = $xml -replace '%%ITADMIN_PASSWORD%%', (Escape-XML $Config_ITAdminPassword)
+$xml = $xml -replace '%%COMPUTER_NAME%%',    (Escape-XML $computerNameForXml)
 
 # Clear password from memory
 $Config_ITAdminPassword = $null

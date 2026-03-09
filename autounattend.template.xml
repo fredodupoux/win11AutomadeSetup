@@ -13,6 +13,7 @@
     %%ITADMIN_USERNAME%%   Local IT admin account username
     %%ITADMIN_DISPLAY%%    IT admin display name (full name)
     %%ITADMIN_PASSWORD%%   IT admin account password (plain text on USB only)
+    %%COMPUTER_NAME%%      Machine hostname (falls back to WIN11-SETUP if blank)
 
   USB STRUCTURE (after running Build-USB.ps1):
     USB root/
@@ -175,11 +176,7 @@
                publicKeyToken="31bf3856ad364e35"
                language="neutral"
                versionScope="nonSxS">
-      <!--
-        Temporary name used only during installation.
-        Setup.ps1 renames the machine to its real name on first run.
-      -->
-      <ComputerName>WIN11-SETUP</ComputerName>
+      <ComputerName>%%COMPUTER_NAME%%</ComputerName>
       <TimeZone>%%TIMEZONE%%</TimeZone>
       <RegisteredOrganization>%%ORGANIZATION%%</RegisteredOrganization>
     </component>

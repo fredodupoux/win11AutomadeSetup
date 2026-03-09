@@ -39,7 +39,6 @@ $Config_PackageFile    = ""
 $Config_WifiSSID       = ""
 $Config_WifiPassword   = ""
 $Config_TailscaleAuthKey = ""
-$Config_ComputerName   = ""
 $Config_ITAdminToHide  = ""
 $Config_NewUsername    = ""
 $Config_NewFullName    = ""
@@ -274,8 +273,6 @@ Write-Host "--- Phase 7: User Management ---"
 # Track what was configured for the summary
 $ConfiguredITAdmin    = ""
 $ConfiguredNewUser    = ""
-$RenameRequired       = $false
-$NewComputerName      = ""
 
 # ------------------------------------------------------------------
 # 7.1 Hide IT Admin Account from login screen
@@ -307,31 +304,6 @@ if (-not [string]::IsNullOrWhiteSpace($ITAdminUser)) {
     } else {
         Write-Warning "User '$ITAdminUser' not found on this machine. Skipping."
     }
-}
-
-# ------------------------------------------------------------------
-# 7.2 Rename Computer
-# ------------------------------------------------------------------
-Write-Host ""
-Write-Host "Current computer name: $env:COMPUTERNAME"
-Write-Host "Naming rules: max 15 characters, letters/numbers/hyphens only, no spaces"
-if (-not [string]::IsNullOrWhiteSpace($Config_ComputerName)) {
-    $NewComputerName = $Config_ComputerName
-    Write-Host "Computer name (from config): $NewComputerName"
-} else {
-    $NewComputerName = Read-Host "Enter new computer name (leave empty to skip)"
-}
-
-if (-not [string]::IsNullOrWhiteSpace($NewComputerName)) {
-    # Validate: strip invalid characters to a safe name and warn if changed
-    $SanitizedName = $NewComputerName -replace '[^a-zA-Z0-9\-]', '' | ForEach-Object { $_.Substring(0, [Math]::Min($_.Length, 15)) }
-    if ($SanitizedName -ne $NewComputerName) {
-        Write-Warning "Name sanitized to: $SanitizedName (removed invalid characters / truncated)"
-        $NewComputerName = $SanitizedName
-    }
-    Rename-Computer -NewName $NewComputerName -Force
-    $RenameRequired = $true
-    Write-Host "[OK] Computer will be renamed to '$NewComputerName' on next restart"
 }
 
 # ------------------------------------------------------------------
@@ -463,20 +435,9 @@ Write-Host "  [OK] Package manager updated"
 if (-not [string]::IsNullOrEmpty($ConfiguredITAdmin)) {
     Write-Host "  [OK] IT admin hidden from login screen: $ConfiguredITAdmin"
 }
-if ($RenameRequired) {
-    Write-Host "  [OK] Computer rename pending (restart required): $NewComputerName"
-}
 if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
     Write-Host "  [OK] End user account created: $ConfiguredNewUser"
 }
 Write-Host "  [OK] Security hardening applied"
 Write-Host ""
 
-
-# Prompt for restart (needed for computer rename + BitLocker init)
-if ($RenameRequired) {
-    $Restart = Read-Host "Restart now to apply computer rename? (y/N)"
-    if ($Restart -ieq 'y') {
-        Restart-Computer -Force
-    }
-}
