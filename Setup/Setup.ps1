@@ -419,7 +419,46 @@ Write-Host "[OK] SMBv1: disabled"
 
 
 # ================================================================
-# PHASE 9: Cleanup and Summary
+# PHASE 9: Dell Command Update
+# ================================================================
+# Dell Command Update is installed via packages.json but consistently
+# fails during winget import due to a .NET runtime timing issue.
+# Running it explicitly here after all other apps are installed
+# resolves the problem reliably.
+
+Write-Host "--- Phase 9: Dell Command Update ---"
+winget install --id Dell.CommandUpdate --source winget --accept-source-agreements --accept-package-agreements --silent
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "[OK] Dell Command Update installed"
+} elseif ($LASTEXITCODE -eq -1978335189) {
+    Write-Host "[OK] Dell Command Update already installed"
+} else {
+    Write-Warning "Dell Command Update install exited with code $LASTEXITCODE - may need to be installed manually"
+}
+Write-Host ""
+
+# ================================================================
+# PHASE 10: Windows Update
+# ================================================================
+
+Write-Host "--- Phase 10: Windows Update ---"
+Write-Host "Installing PSWindowsUpdate module..."
+
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
+Install-Module -Name PSWindowsUpdate -Force -AllowClobber -ErrorAction SilentlyContinue
+
+if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+    Import-Module PSWindowsUpdate
+    Write-Host "Scanning and installing Windows updates (this may take a while)..."
+    Install-WindowsUpdate -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue
+    Write-Host "[OK] Windows Update: completed"
+} else {
+    Write-Warning "PSWindowsUpdate module could not be installed. Run Windows Update manually after provisioning."
+}
+Write-Host ""
+
+# ================================================================
+# PHASE 11: Summary
 # ================================================================
 
 Write-Host "============================================"
@@ -438,6 +477,9 @@ if (-not [string]::IsNullOrEmpty($ConfiguredITAdmin)) {
 if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
     Write-Host "  [OK] End user account created: $ConfiguredNewUser"
 }
+Write-Host "  [OK] Dell Command Update installed"
+Write-Host "  [OK] Windows Update triggered"
 Write-Host "  [OK] Security hardening applied"
 Write-Host ""
 
+Stop-Transcript

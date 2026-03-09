@@ -25,9 +25,8 @@
                 {"PackageIdentifier": "Notepad++.Notepad++"},
                 {"PackageIdentifier": "VideoLAN.VLC"},
 
-                {"PackageIdentifier": "Bitdefender.Bitdefender"},
-
-                {"PackageIdentifier": "Dell.CommandUpdate"}
+                {"PackageIdentifier": "Bitdefender.Bitdefender"}
+                
             ]
         }
     ]

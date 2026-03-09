@@ -21,6 +21,7 @@
     ├── [Windows 11 ISO files]
     └── Setup/
         ├── Setup.ps1
+        ├── Launch-Setup.cmd    (auto-launched after first login)
         ├── packages.json
         ├── config.example.ps1
         └── config.ps1          (your secrets - gitignored)
@@ -165,9 +166,8 @@
   <!-- ========================================================
        PASS 2: specialize
        Runs after first boot, before OOBE, as SYSTEM.
-       Handles: computer name and time zone.
-       After Windows is set up, log in as ITAdmin and run
-       Setup.ps1 directly from the USB drive.
+       Handles: computer name, time zone, and registering the
+       RunOnce key that launches Setup.ps1 after first login.
        ======================================================== -->
   <settings pass="specialize">
 
@@ -179,6 +179,28 @@
       <ComputerName>%%COMPUTER_NAME%%</ComputerName>
       <TimeZone>%%TIMEZONE%%</TimeZone>
       <RegisteredOrganization>%%ORGANIZATION%%</RegisteredOrganization>
+    </component>
+
+    <!-- ========================================================
+         Register a RunOnce key (as SYSTEM, no permission issues)
+         that fires after the first user login, in the user's
+         shell session. The cmd scans drive letters at runtime so
+         the USB drive letter does not need to be hardcoded.
+         Launch-Setup.cmd waits 2 minutes, then runs Setup.ps1.
+         The RunOnce key auto-deletes itself after it fires.
+         ======================================================== -->
+    <component name="Microsoft-Windows-Deployment"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" /v Win11Provision /t REG_SZ /d "cmd.exe /c for %D in (D E F G H I J K) do if exist \"%D:\Setup\Launch-Setup.cmd\" call \"%D:\Setup\Launch-Setup.cmd\"" /f</Path>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+      </RunSynchronous>
     </component>
 
   </settings>
