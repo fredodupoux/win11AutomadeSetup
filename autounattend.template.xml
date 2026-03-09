@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   ============================================================
-  Windows 11 Unattended Answer File — TEMPLATE
+  Windows 11 Unattended Answer File - TEMPLATE
   ============================================================
   DO NOT use this file directly on a USB drive.
   Run Build-USB.ps1 to generate autounattend.xml from config.ps1.
@@ -16,13 +16,13 @@
 
   USB STRUCTURE (after running Build-USB.ps1):
     USB root/
-    ├── autounattend.xml        (generated — not this template)
+    ├── autounattend.xml        (generated - not this template)
     ├── [Windows 11 ISO files]
     └── Setup/
         ├── Setup.ps1
         ├── packages.json
         ├── config.example.ps1
-        └── config.ps1          (your secrets — gitignored)
+        └── config.ps1          (your secrets - gitignored)
 
   DELL OPTIPLEX 3070/5070 MFF NOTES:
     - No driver injection needed. Windows 11 inbox drivers cover
@@ -79,13 +79,13 @@
       </UserData>
 
       <!-- ====================================================
-           DISK LAYOUT — UEFI/GPT (erases Disk 0 entirely)
+           DISK LAYOUT - UEFI/GPT (erases Disk 0 entirely)
            Partition map:
              1. EFI System Partition  (100 MB, FAT32)
              2. Microsoft Reserved    ( 16 MB, no filesystem)
              3. Windows OS            (all remaining space, NTFS)
            Windows Setup creates the WinRE recovery partition
-           automatically at the end — no need to define it here.
+           automatically at the end - no need to define it here.
            ==================================================== -->
       <DiskConfiguration>
         <WillShowUI>OnError</WillShowUI>
@@ -164,9 +164,9 @@
   <!-- ========================================================
        PASS 2: specialize
        Runs after first boot, before OOBE, as SYSTEM.
-       Handles: computer name, time zone, and — critically —
-       auto-copying the Setup\ folder from the USB to C:\Setup
-       so it is available when the user logs in.
+       Handles: computer name and time zone.
+       After Windows is set up, log in as ITAdmin and run
+       Setup.ps1 directly from the USB drive.
        ======================================================== -->
   <settings pass="specialize">
 
@@ -184,45 +184,14 @@
       <RegisteredOrganization>%%ORGANIZATION%%</RegisteredOrganization>
     </component>
 
-    <component name="Microsoft-Windows-Deployment"
-               processorArchitecture="amd64"
-               publicKeyToken="31bf3856ad364e35"
-               language="neutral"
-               versionScope="nonSxS">
-      <RunSynchronous>
-
-        <!--
-          Scan all drive letters for the Setup\ folder (identified by
-          the presence of Setup\Setup.ps1). Copies it to C:\Setup so
-          it persists after the USB is removed.
-
-          IMPORTANT: Both commands are wrapped in try/catch and always
-          exit 0. A failure here must never abort Windows Setup — the
-          IT admin can copy the Setup folder manually if needed.
-        -->
-        <RunSynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Description>Copy provisioning files from USB to C:\Setup</Description>
-          <Path>powershell.exe -NonInteractive -Command "try { foreach ($drive in [System.IO.DriveInfo]::GetDrives()) { $marker = [IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup', 'Setup.ps1'); if (Test-Path $marker) { Copy-Item -Path ([IO.Path]::Combine($drive.RootDirectory.FullName, 'Setup')) -Destination 'C:\' -Recurse -Force; break } } } catch {} ; exit 0"</Path>
-        </RunSynchronousCommand>
-
-        <!-- Set PowerShell execution policy so Setup.ps1 can run -->
-        <RunSynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <Description>Allow PowerShell script execution</Description>
-          <Path>powershell.exe -NonInteractive -Command "try { Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force } catch {} ; exit 0"</Path>
-        </RunSynchronousCommand>
-
-      </RunSynchronous>
-    </component>
-
   </settings>
 
   <!-- ========================================================
        PASS 3: oobeSystem
        Runs during OOBE.
        Handles: skip all OOBE screens, create local IT admin
-                account, auto-logon once, launch Setup.ps1.
+                account, auto-logon once.
+       After first login, run Setup.ps1 from the USB manually.
        ======================================================== -->
   <settings pass="oobeSystem">
 
@@ -252,7 +221,7 @@
 
       <!-- ====================================================
            IT ADMIN LOCAL ACCOUNT
-           Password comes from %%ITADMIN_PASSWORD%% — substituted
+           Password comes from %%ITADMIN_PASSWORD%% - substituted
            by Build-USB.ps1 at USB prep time, never stored in git.
            ==================================================== -->
       <UserAccounts>
@@ -272,7 +241,7 @@
       <!-- ====================================================
            AUTO LOGON (one time only)
            Logs in as the IT admin so Setup.ps1 runs on first boot.
-           LogonCount=1 — subsequent logins require password.
+           LogonCount=1 - subsequent logins require password.
            ==================================================== -->
       <AutoLogon>
         <Enabled>true</Enabled>
@@ -283,20 +252,6 @@
           <PlainText>true</PlainText>
         </Password>
       </AutoLogon>
-
-      <!-- ====================================================
-           LAUNCH Setup.ps1 ON FIRST LOGIN
-           Runs from C:\Setup (copied there during specialize).
-           -NoExit keeps the window open for interactive prompts.
-           ==================================================== -->
-      <FirstLogonCommands>
-        <SynchronousCommand wcm:action="add">
-          <Order>1</Order>
-          <Description>Launch provisioning script</Description>
-          <CommandLine>powershell.exe -NoExit -ExecutionPolicy Bypass -File "C:\Setup\Setup.ps1"</CommandLine>
-          <RequiresUserInput>true</RequiresUserInput>
-        </SynchronousCommand>
-      </FirstLogonCommands>
 
     </component>
 

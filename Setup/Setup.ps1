@@ -127,22 +127,10 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     }
 }
 Write-Host "[OK] winget available"
+
+# 3.4 WiFi Setup - connect before any network-dependent phase
 Write-Host ""
-
-# ================================================================
-# PHASE 4: Package Manager Update
-# ================================================================
-
-Write-Host "--- Phase 4: Package Manager ---"
-Write-Host "Updating winget sources..."
-winget source update
-Write-Host ""
-
-# ================================================================
-# PHASE 5: WiFi Setup (Optional)
-# ================================================================
-
-Write-Host "--- Phase 5: WiFi Setup ---"
+Write-Host "--- Phase 3.4: WiFi Setup ---"
 
 if (-not [string]::IsNullOrWhiteSpace($Config_WifiSSID)) {
     $WifiSSID     = $Config_WifiSSID
@@ -157,7 +145,6 @@ if (-not [string]::IsNullOrWhiteSpace($Config_WifiSSID)) {
 if (-not [string]::IsNullOrWhiteSpace($WifiSSID)) {
     Write-Host "Configuring WiFi profile for: $WifiSSID"
 
-    # Build a WPA2-Personal (WPA2PSK/AES) profile XML
     $WifiProfileXml = @"
 <?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
@@ -189,7 +176,6 @@ if (-not [string]::IsNullOrWhiteSpace($WifiSSID)) {
     $ProfilePath = "$env:TEMP\wifi-profile.xml"
     [System.IO.File]::WriteAllText($ProfilePath, $WifiProfileXml, [System.Text.Encoding]::UTF8)
 
-    # Add profile for all users and connect
     netsh wlan add profile filename="$ProfilePath" user=all | Out-Null
     netsh wlan connect name="$WifiSSID" | Out-Null
 
@@ -203,25 +189,39 @@ if (-not [string]::IsNullOrWhiteSpace($WifiSSID)) {
 Write-Host ""
 
 # ================================================================
-# PHASE 6: VPN / Network Setup (Optional)
+# PHASE 4: Package Manager Update
 # ================================================================
 
-Write-Host "--- Phase 6: VPN Setup ---"
+Write-Host "--- Phase 4: Package Manager ---"
+Write-Host "Updating winget sources..."
+winget source update
+Write-Host ""
+
+# ================================================================
+# PHASE 5: VPN / Network Setup (Optional)
+# ================================================================
+
+Write-Host "--- Phase 5: VPN Setup ---"
 
 if (-not [string]::IsNullOrEmpty($TailscaleAuthKey)) {
     Write-Host "Installing Tailscale..."
-    winget install --id Tailscale.Tailscale --accept-source-agreements --accept-package-agreements --silent
+    winget install --id Tailscale.Tailscale --source winget --accept-source-agreements --accept-package-agreements --silent
 
     # Give the service a moment to start
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 10
+
+    # Refresh PATH so newly installed executables are visible
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
     # Find Tailscale executable - check PATH first, then common install locations
-    $TailscalePath = (Get-Command tailscale -ErrorAction SilentlyContinue)?.Source
+    $TailscaleCmd = Get-Command tailscale -ErrorAction SilentlyContinue
+    $TailscalePath = if ($TailscaleCmd) { $TailscaleCmd.Source } else { $null }
     if (-not $TailscalePath) {
         $TailscalePath = @(
             "C:\Program Files\Tailscale\tailscale.exe",
             "C:\Program Files (x86)\Tailscale\tailscale.exe",
-            "$env:ProgramFiles\Tailscale\tailscale.exe"
+            "$env:ProgramFiles\Tailscale\tailscale.exe",
+            "$env:LOCALAPPDATA\Tailscale\tailscale.exe"
         ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     }
     if (-not $TailscalePath) {
@@ -250,7 +250,7 @@ Write-Host ""
 # PHASE 6: Application Installation
 # ================================================================
 
-Write-Host "--- Phase 7: Application Installation ---"
+Write-Host "--- Phase 6: Application Installation ---"
 
 $ScriptDir = $PSScriptRoot
 $PackagePath = Join-Path $ScriptDir $PackageFile
@@ -269,7 +269,7 @@ Write-Host ""
 # PHASE 7: User Management
 # ================================================================
 
-Write-Host "--- Phase 8: User Management ---"
+Write-Host "--- Phase 7: User Management ---"
 
 # Track what was configured for the summary
 $ConfiguredITAdmin    = ""
@@ -414,7 +414,7 @@ Write-Host ""
 # PHASE 8: Security Configuration
 # ================================================================
 
-Write-Host "--- Phase 9: Security Configuration ---"
+Write-Host "--- Phase 8: Security Configuration ---"
 
 # 8.1 Enable Automatic Updates
 $WUPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
@@ -433,6 +433,13 @@ powercfg /SETDCVALUEINDEX SCHEME_CURRENT SUB_NONE CONSOLELOCK 1  # on battery
 powercfg /S SCHEME_CURRENT
 Write-Host "[OK] Screen lock: password required on wake"
 
+
+# 8.4 Enable Remote Desktop
+Set-ItemProperty `
+    -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
+    -Name "fDenyTSConnections" -Value 0
+Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+Write-Host "[OK] Remote Desktop: enabled"
 
 # 8.5 Disable SMBv1 (legacy protocol, high attack surface)
 Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force

@@ -86,8 +86,15 @@ winget search <appname>
 1. Plug the USB into the target machine
 2. Power on and boot from USB (F12 on Dell for boot menu)
 3. Windows installs automatically — no interaction needed
-4. Machine reboots, logs in as `ITAdmin`, and **Setup.ps1 launches automatically**
-5. Follow the prompts in the PowerShell window:
+4. Machine reboots and logs in as `ITAdmin`
+5. Open **PowerShell as Administrator** and run Setup.ps1 directly from the USB:
+
+```powershell
+# Replace E: with the actual USB drive letter
+powershell.exe -ExecutionPolicy Bypass -File "E:\Setup\Setup.ps1"
+```
+
+6. Follow the prompts in the PowerShell window:
    - 📦 Choose package file name
    - 🔒 Enter Tailscale auth key (optional)
    - 💻 Rename the computer
@@ -160,7 +167,7 @@ cd C:\path\to\Setup
 | 🕐 Productivity | Hubstaff |
 | 🖥️ Remote Access | AnyDesk |
 | 🔧 Utilities | 7-Zip, Notepad++, VLC |
-| 🔒 Security | Malwarebytes, Tailscale |
+| 🔒 Security | Bitdefender, Tailscale |
 | 🖥️ Hardware | Dell Command Update |
 
 Edit `packages.json` freely — add or remove packages to match your environment.
@@ -172,8 +179,7 @@ Edit `packages.json` freely — add or remove packages to match your environment
 - ✅ Windows Update set to auto-download and install
 - ✅ Firewall enabled on all profiles (Domain, Public, Private)
 - ✅ Password required on wake / screen lock
-- ✅ Remote Desktop disabled
-- ✅ Remote Assistance disabled
+- ✅ Remote Desktop enabled (with firewall rule)
 - ✅ SMBv1 disabled
 - ✅ BitLocker enabled on C: (Windows Pro/Enterprise only)
 - ✅ IT admin account hidden from login screen

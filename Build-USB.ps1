@@ -218,6 +218,12 @@ Write-Host ""
 # Escape single quotes in string values for safe embedding in PS1
 function Escape-PS1String { param([string]$s); return $s -replace "'", "''" }
 
+# Escapes special XML characters so passwords/names don't break the XML
+function Escape-XML {
+    param([string]$s)
+    return $s -replace '&', '&amp;' -replace '<', '&lt;' -replace '>', '&gt;' -replace '"', '&quot;' -replace "'", '&apos;'
+}
+
 $adminBoolStr = if ($Config_NewUserIsAdmin) { '$true' } else { '$false' }
 
 $configContent = @"
@@ -259,12 +265,12 @@ if (-not (Test-Path $TemplatePath)) {
 }
 
 $xml = Get-Content -Path $TemplatePath -Raw -Encoding UTF8
-$xml = $xml -replace '%%ORGANIZATION%%',     $Config_Organization
-$xml = $xml -replace '%%WINDOWS_EDITION%%',  $Config_WindowsEdition
-$xml = $xml -replace '%%TIMEZONE%%',         $Config_Timezone
-$xml = $xml -replace '%%ITADMIN_USERNAME%%',  $Config_ITAdminUsername
-$xml = $xml -replace '%%ITADMIN_DISPLAY%%',  $Config_ITAdminDisplayName
-$xml = $xml -replace '%%ITADMIN_PASSWORD%%',  $Config_ITAdminPassword
+$xml = $xml -replace '%%ORGANIZATION%%',      (Escape-XML $Config_Organization)
+$xml = $xml -replace '%%WINDOWS_EDITION%%',  (Escape-XML $Config_WindowsEdition)
+$xml = $xml -replace '%%TIMEZONE%%',         (Escape-XML $Config_Timezone)
+$xml = $xml -replace '%%ITADMIN_USERNAME%%', (Escape-XML $Config_ITAdminUsername)
+$xml = $xml -replace '%%ITADMIN_DISPLAY%%',  (Escape-XML $Config_ITAdminDisplayName)
+$xml = $xml -replace '%%ITADMIN_PASSWORD%%', (Escape-XML $Config_ITAdminPassword)
 
 # Clear password from memory
 $Config_ITAdminPassword = $null
