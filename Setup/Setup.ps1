@@ -231,7 +231,7 @@ if (-not [string]::IsNullOrEmpty($TailscaleAuthKey)) {
 
     if ($TailscalePath) {
         Write-Host "Authenticating Tailscale at: $TailscalePath"
-        & $TailscalePath up --authkey="$TailscaleAuthKey"
+        & $TailscalePath up --authkey="$TailscaleAuthKey" --unattended
         Write-Host "[OK] Tailscale connected"
     } else {
         Write-Warning "Tailscale installed but tailscale.exe not found. Open Tailscale from the system tray to authenticate manually."
@@ -374,6 +374,10 @@ if ($DoCreateUser) {
             Add-LocalGroupMember -Group "Users" -Member $NewUsername
             Write-Host "[OK] '$NewUsername' created as standard user"
         }
+
+        # Force password change on first login
+        Set-LocalUser -Name $NewUsername -PasswordExpired $true
+        Write-Host "[OK] '$NewUsername' will be prompted to change password on first login"
 
         $ConfiguredNewUser = $NewUsername
     }

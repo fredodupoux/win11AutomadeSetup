@@ -60,11 +60,13 @@ Boot target machine from USB
     │                     auto-logs in as ITAdmin (once)
     │
     └─ First login     →  RunOnce fires Launch-Setup.cmd
-                          waits 2 min for system to initialize
-                          sets PowerShell execution policy
+                          waits 5 min for system to initialize
+                          sets PowerShell execution policy to RemoteSigned
                           runs Setup.ps1 from USB automatically
                           Setup.ps1 installs apps, configures VPN,
-                          creates user account, hardens security
+                          creates user account, hardens security,
+                          triggers Windows Update, increments
+                          computer name on USB for next machine
 ```
 
 ---
@@ -144,7 +146,7 @@ USB root/
 1. Plug the USB into the target machine
 2. Power on and boot from USB (F12 on Dell for boot menu)
 3. Windows installs fully automatically — no interaction needed
-4. The machine reboots, logs in as ITAdmin, and after ~2 minutes **Setup.ps1 launches automatically** in a PowerShell window
+4. The machine reboots, logs in as ITAdmin, and after ~5 minutes **Setup.ps1 launches automatically** in a PowerShell window
 5. Follow the prompts for any values not pre-filled in `config.ps1`:
    - Tailscale auth key (if not in config)
    - End user account details (if not in config)
@@ -200,8 +202,9 @@ Replace `D:` with the actual drive letter where the Setup folder is located.
 | 7 — Users | Hides IT admin account from login screen; creates end-user account |
 | 8 — Security | Enables auto-updates, firewall, screen lock, Remote Desktop; disables SMBv1 |
 | 9 — Dell Command Update | Installs Dell Command Update explicitly via winget (resolves .NET timing issue with `winget import`) |
-| 10 — Windows Update | Installs PSWindowsUpdate module and runs a full update pass |
-| 11 — Summary | Displays log file path and summary of all actions taken |
+| 10 — Windows Update | Triggers Windows Update via `UsoClient StartInteractiveScan` (native update engine — updates download in the background) |
+| 11 — USB name increment | Reads `autounattend.xml` on the USB and increments the trailing number in `<ComputerName>` so the next machine gets a unique name automatically |
+| 12 — Summary | Displays log file path and summary of all actions taken |
 
 ---
 
