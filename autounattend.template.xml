@@ -186,7 +186,7 @@
          that fires after the first user login, in the user's
          shell session. The cmd scans drive letters at runtime so
          the USB drive letter does not need to be hardcoded.
-         Launch-Setup.cmd waits 2 minutes, then runs Setup.ps1.
+         Launch-Setup.cmd waits 5 minutes, then runs Setup.ps1.
          The RunOnce key auto-deletes itself after it fires.
          ======================================================== -->
     <component name="Microsoft-Windows-Deployment"

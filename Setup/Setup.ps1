@@ -440,25 +440,59 @@ Write-Host ""
 # ================================================================
 # PHASE 10: Windows Update
 # ================================================================
+# Uses the built-in Windows Update Orchestrator (UsoClient) -
+# the same engine behind "Check for updates" in Settings.
+# Updates download and install in the background; Windows will
+# prompt the user to reboot when ready.
 
 Write-Host "--- Phase 10: Windows Update ---"
-Write-Host "Installing PSWindowsUpdate module..."
+Write-Host "Triggering Windows Update scan..."
+UsoClient StartInteractiveScan
+Write-Host "[OK] Windows Update: scan initiated (updates will download in the background)"
+Write-Host "     Reboot when prompted to complete installation."
+Write-Host ""
 
-Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
-Install-Module -Name PSWindowsUpdate -Force -AllowClobber -ErrorAction SilentlyContinue
+# ================================================================
+# PHASE 11: Increment computer name on USB for next deployment
+# ================================================================
+# Edits autounattend.xml on the USB drive so the next machine
+# provisioned gets an automatically incremented name.
+# e.g. SOLIMA-PC01 -> SOLIMA-PC02, preserving zero-padding.
 
-if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
-    Import-Module PSWindowsUpdate
-    Write-Host "Scanning and installing Windows updates (this may take a while)..."
-    Install-WindowsUpdate -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue
-    Write-Host "[OK] Windows Update: completed"
+Write-Host "--- Phase 11: Updating computer name on USB ---"
+
+$AutounattendPath = Join-Path (Split-Path $PSScriptRoot -Parent) "autounattend.xml"
+
+if (Test-Path $AutounattendPath) {
+    $xmlContent = Get-Content -Path $AutounattendPath -Raw -Encoding UTF8
+
+    if ($xmlContent -match '<ComputerName>([^<]+)</ComputerName>') {
+        $currentName = $Matches[1]
+
+        if ($currentName -match '^(.*?)(\d+)$') {
+            $prefix     = $Matches[1]
+            $number     = $Matches[2]
+            $width      = $number.Length
+            $nextNumber = ([int]$number + 1).ToString("D$width")
+            $newName    = "$prefix$nextNumber"
+
+            $xmlContent = $xmlContent -replace "<ComputerName>$([regex]::Escape($currentName))</ComputerName>",
+                                               "<ComputerName>$newName</ComputerName>"
+            [System.IO.File]::WriteAllText($AutounattendPath, $xmlContent, [System.Text.Encoding]::UTF8)
+            Write-Host "[OK] Computer name on USB incremented: $currentName -> $newName"
+        } else {
+            Write-Warning "Computer name '$currentName' has no trailing number - skipping increment"
+        }
+    } else {
+        Write-Warning "No <ComputerName> tag found in autounattend.xml - skipping increment"
+    }
 } else {
-    Write-Warning "PSWindowsUpdate module could not be installed. Run Windows Update manually after provisioning."
+    Write-Warning "autounattend.xml not found at: $AutounattendPath - skipping increment"
 }
 Write-Host ""
 
 # ================================================================
-# PHASE 11: Summary
+# PHASE 12: Summary
 # ================================================================
 
 Write-Host "============================================"
@@ -478,7 +512,7 @@ if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
     Write-Host "  [OK] End user account created: $ConfiguredNewUser"
 }
 Write-Host "  [OK] Dell Command Update installed"
-Write-Host "  [OK] Windows Update triggered"
+Write-Host "  [OK] Windows Update: scan initiated"
 Write-Host "  [OK] Security hardening applied"
 Write-Host ""
 

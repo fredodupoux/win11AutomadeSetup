@@ -6,8 +6,8 @@ echo ============================================
 echo      Windows 11 Provisioning - Launcher
 echo ============================================
 echo.
-echo Waiting 2 minutes for system to fully initialize...
-timeout /t 120 /nobreak
+echo Waiting 5 minutes for system to fully initialize...
+timeout /t 300 /nobreak
 echo.
 
 rem Scan all drive letters to find Setup.ps1 on the USB
