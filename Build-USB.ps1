@@ -156,7 +156,7 @@ $Config_ITAdminDisplayName = Prompt-Value `
     -Default "IT Admin"
 
 $Config_ITAdminPassword = Prompt-Secret `
-    -Label    "IT admin password (hidden)" `
+    -Label    "IT admin password" `
     -Current  $Config_ITAdminPassword `
     -Note     "Temporary password - rotate it after provisioning" `
     -Required $true
@@ -200,7 +200,7 @@ $Config_NewFullName = Prompt-Value `
     -Current $Config_NewFullName
 
 $Config_NewPassword = Prompt-Secret `
-    -Label   "End user password (hidden)" `
+    -Label   "End user password" `
     -Current $Config_NewPassword
 
 if (-not [string]::IsNullOrWhiteSpace($Config_NewUsername)) {
