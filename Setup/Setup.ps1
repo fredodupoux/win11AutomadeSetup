@@ -39,7 +39,6 @@ $Config_PackageFile    = ""
 $Config_WifiSSID       = ""
 $Config_WifiPassword   = ""
 $Config_TailscaleAuthKey = ""
-$Config_ITAdminToHide  = ""
 $Config_NewUsername    = ""
 $Config_NewFullName    = ""
 $Config_NewPassword    = ""
@@ -270,46 +269,7 @@ Write-Host ""
 
 Write-Host "--- Phase 7: User Management ---"
 
-# Track what was configured for the summary
-$ConfiguredITAdmin    = ""
-$ConfiguredNewUser    = ""
-
-# ------------------------------------------------------------------
-# 7.1 Hide IT Admin Account from login screen
-# ------------------------------------------------------------------
-if (-not [string]::IsNullOrWhiteSpace($Config_ITAdminToHide)) {
-    $ITAdminUser = $Config_ITAdminToHide
-    Write-Host "IT admin to hide (from config): $ITAdminUser"
-} else {
-    $ITAdminUser = Read-Host "Enter IT admin username to hide from login screen (leave empty to skip)"
-}
-
-if (-not [string]::IsNullOrWhiteSpace($ITAdminUser)) {
-    $UserExists = Get-LocalUser -Name $ITAdminUser -ErrorAction SilentlyContinue
-    if ($UserExists) {
-        $RegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
-        if (-not (Test-Path $RegPath)) {
-            New-Item -Path $RegPath -Force | Out-Null
-        }
-        New-ItemProperty -Path $RegPath -Name $ITAdminUser -Value 0 -PropertyType DWORD -Force | Out-Null
-
-        # Hide the home folder from Explorer
-        $UserProfile = "C:\Users\$ITAdminUser"
-        if (Test-Path $UserProfile) {
-            attrib +h "$UserProfile"
-        }
-
-        $ConfiguredITAdmin = $ITAdminUser
-        Write-Host "[OK] '$ITAdminUser' hidden from login screen"
-    } else {
-        Write-Warning "User '$ITAdminUser' not found on this machine. Skipping."
-    }
-}
-
-# ------------------------------------------------------------------
-# 7.3 Create End User Account
-# ------------------------------------------------------------------
-Write-Host ""
+$ConfiguredNewUser = ""
 
 # Determine if user creation is driven by config or interactive
 $ConfigHasUser = (-not [string]::IsNullOrWhiteSpace($Config_NewUsername)) -and
@@ -332,57 +292,63 @@ if ($DoCreateUser) {
         $NewFullName = Read-Host "Enter full name"
     }
 
-    # Password - config or prompt (with confirmation)
-    if (-not [string]::IsNullOrWhiteSpace($Config_NewPassword)) {
-        $NewPasswordSecure = ConvertTo-SecureString $Config_NewPassword -AsPlainText -Force
-        $Config_NewPassword = $null  # clear from memory immediately
-        $PasswordsMatch = $true
+    # Check if the user already exists
+    $UserAlreadyExists = Get-LocalUser -Name $NewUsername -ErrorAction SilentlyContinue
+    if ($UserAlreadyExists) {
+        Write-Warning "User '$NewUsername' already exists. Skipping user creation."
     } else {
-        $NewPasswordSecure  = Read-Host "Enter password" -AsSecureString
-        $NewPasswordConfirm = Read-Host "Confirm password" -AsSecureString
-
-        $Pwd1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordSecure))
-        $Pwd2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordConfirm))
-        $PasswordsMatch = ($Pwd1 -eq $Pwd2)
-        $Pwd1 = $null
-        $Pwd2 = $null
-    }
-
-    if (-not $PasswordsMatch) {
-        Write-Warning "Passwords do not match. Skipping user creation."
-    } else {
-        New-LocalUser `
-            -Name                $NewUsername `
-            -Password            $NewPasswordSecure `
-            -FullName            $NewFullName `
-            -Description         "End user account" `
-            -PasswordNeverExpires:$false | Out-Null
-
-        # Admin group - config or prompt
-        if ($ConfigHasUser) {
-            $MakeAdmin = $Config_NewUserIsAdmin
+        # Password - config or prompt (with confirmation)
+        if (-not [string]::IsNullOrWhiteSpace($Config_NewPassword)) {
+            $NewPasswordSecure = ConvertTo-SecureString $Config_NewPassword -AsPlainText -Force
+            $Config_NewPassword = $null  # clear from memory immediately
+            $PasswordsMatch = $true
         } else {
-            $MakeAdmin = (Read-Host "Add '$NewUsername' to Administrators group? (y/N)") -ieq 'y'
+            $NewPasswordSecure  = Read-Host "Enter password" -AsSecureString
+            $NewPasswordConfirm = Read-Host "Confirm password" -AsSecureString
+
+            $Pwd1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordSecure))
+            $Pwd2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($NewPasswordConfirm))
+            $PasswordsMatch = ($Pwd1 -eq $Pwd2)
+            $Pwd1 = $null
+            $Pwd2 = $null
         }
 
-        if ($MakeAdmin) {
-            Add-LocalGroupMember -Group "Administrators" -Member $NewUsername
-            Write-Host "[OK] '$NewUsername' created and added to Administrators"
+        if (-not $PasswordsMatch) {
+            Write-Warning "Passwords do not match. Skipping user creation."
         } else {
-            Add-LocalGroupMember -Group "Users" -Member $NewUsername
-            Write-Host "[OK] '$NewUsername' created as standard user"
+            New-LocalUser `
+                -Name                $NewUsername `
+                -Password            $NewPasswordSecure `
+                -FullName            $NewFullName `
+                -Description         "End user account" `
+                -PasswordNeverExpires:$false | Out-Null
+
+            # Admin group - config or prompt
+            if ($ConfigHasUser) {
+                $MakeAdmin = $Config_NewUserIsAdmin
+            } else {
+                $MakeAdmin = (Read-Host "Add '$NewUsername' to Administrators group? (y/N)") -ieq 'y'
+            }
+
+            if ($MakeAdmin) {
+                Add-LocalGroupMember -Group "Administrators" -Member $NewUsername
+                Write-Host "[OK] '$NewUsername' created and added to Administrators"
+            } else {
+                Add-LocalGroupMember -Group "Users" -Member $NewUsername
+                Write-Host "[OK] '$NewUsername' created as standard user"
+            }
+
+            # Force password change on first login
+            & net user $NewUsername /logonpasswordchg:yes | Out-Null
+            Write-Host "[OK] '$NewUsername' will be prompted to change password on first login"
+
+            $ConfiguredNewUser = $NewUsername
         }
 
-        # Force password change on first login
-        Set-LocalUser -Name $NewUsername -PasswordExpired $true
-        Write-Host "[OK] '$NewUsername' will be prompted to change password on first login"
-
-        $ConfiguredNewUser = $NewUsername
+        [System.GC]::Collect()
     }
-
-    [System.GC]::Collect()
 }
 Write-Host ""
 
@@ -509,9 +475,6 @@ Write-Host "Summary of actions taken:"
 Write-Host "  [OK] OS verified: Windows 11 build $OSBuild"
 Write-Host "  [OK] Package manager updated"
 
-if (-not [string]::IsNullOrEmpty($ConfiguredITAdmin)) {
-    Write-Host "  [OK] IT admin hidden from login screen: $ConfiguredITAdmin"
-}
 if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
     Write-Host "  [OK] End user account created: $ConfiguredNewUser"
 }
