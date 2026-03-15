@@ -16,16 +16,11 @@
                 {"PackageIdentifier": "Mozilla.Firefox"},
 
                 {"PackageIdentifier": "SlackTechnologies.Slack"},
-                {"PackageIdentifier": "Netsoft.Hubstaff"},
                 {"PackageIdentifier": "AnyDesk.AnyDesk"},
                 {"PackageIdentifier": "Zoom.Zoom"},
-                {"PackageIdentifier": "Microsoft.Teams"},
 
                 {"PackageIdentifier": "7zip.7zip"},
-                {"PackageIdentifier": "Notepad++.Notepad++"},
-                {"PackageIdentifier": "VideoLAN.VLC"},
-
-                {"PackageIdentifier": "Bitdefender.Bitdefender"}
+                {"PackageIdentifier": "Notepad++.Notepad++"}
                 
             ]
         }
