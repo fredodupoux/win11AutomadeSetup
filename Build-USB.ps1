@@ -101,6 +101,7 @@ $Config_PackageFile        = ""
 $Config_WifiSSID           = ""
 $Config_WifiPassword       = ""
 $Config_TailscaleAuthKey   = ""
+$Config_Action1AgentUrl    = ""
 $Config_ComputerName       = ""
 $Config_NewUsername        = ""
 $Config_NewFullName        = ""
@@ -186,6 +187,15 @@ $Config_TailscaleAuthKey = Prompt-Secret `
     -Current $Config_TailscaleAuthKey `
     -Note    "Generate at: https://login.tailscale.com/admin/settings/keys"
 
+$deployAction1 = if (-not [string]::IsNullOrWhiteSpace($Config_Action1AgentUrl)) { $true } `
+                 else { (Read-Host "  Deploy Action1 agent? (y/N)") -ieq 'y' }
+if ($deployAction1) {
+    $Config_Action1AgentUrl = Prompt-Secret `
+        -Label   "Action1 agent download URL" `
+        -Current $Config_Action1AgentUrl `
+        -Note    "Paste the full MSI download link from your Action1 dashboard"
+}
+
 $Config_ComputerName = Prompt-Value `
     -Label   "Computer name" `
     -Current $Config_ComputerName `
@@ -245,6 +255,7 @@ $configContent = @"
 `$Config_WifiSSID           = '$(Escape-PS1String $Config_WifiSSID)'
 `$Config_WifiPassword       = '$(Escape-PS1String $Config_WifiPassword)'
 `$Config_TailscaleAuthKey   = '$(Escape-PS1String $Config_TailscaleAuthKey)'
+`$Config_Action1AgentUrl    = '$(Escape-PS1String $Config_Action1AgentUrl)'
 `$Config_ComputerName       = '$(Escape-PS1String $Config_ComputerName)'
 `$Config_NewUsername        = '$(Escape-PS1String $Config_NewUsername)'
 `$Config_NewFullName        = '$(Escape-PS1String $Config_NewFullName)'
@@ -300,6 +311,7 @@ Write-Host "  Computer name : $(if ($Config_ComputerName) { $Config_ComputerName
 Write-Host "  End user      : $(if ($Config_NewUsername) { $Config_NewUsername } else { '(will prompt during setup)' })"
 Write-Host "  WiFi SSID     : $(if ($Config_WifiSSID) { $Config_WifiSSID } else { '(skipped)' })"
 Write-Host "  Tailscale     : $(if ($Config_TailscaleAuthKey) { '(set)' } else { '(will prompt during setup)' })"
+Write-Host "  Action1 agent : $(if ($Config_Action1AgentUrl) { '(set)' } else { '(skipped)' })"
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Write Windows 11 ISO to USB with Rufus (GPT / UEFI)"

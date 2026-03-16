@@ -39,6 +39,7 @@ $Config_PackageFile    = ""
 $Config_WifiSSID       = ""
 $Config_WifiPassword   = ""
 $Config_TailscaleAuthKey = ""
+$Config_Action1AgentUrl = ""
 $Config_NewUsername    = ""
 $Config_NewFullName    = ""
 $Config_NewPassword    = ""
@@ -424,6 +425,31 @@ if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
     Write-Host "[OK] Windows Update: completed"
 } else {
     Write-Warning "PSWindowsUpdate module could not be installed. Run Windows Update manually after provisioning."
+}
+Write-Host ""
+
+# ================================================================
+# PHASE 10.5: Action1 Agent Deployment
+# ================================================================
+
+Write-Host "--- Phase 10.5: Action1 Agent ---"
+
+if (-not [string]::IsNullOrWhiteSpace($Config_Action1AgentUrl)) {
+    $Action1FileName = Split-Path $Config_Action1AgentUrl -Leaf
+    $Action1TempPath = Join-Path $env:TEMP $Action1FileName
+
+    Write-Host "Downloading Action1 agent..."
+    try {
+        curl.exe -s -o $Action1TempPath $Config_Action1AgentUrl
+        Write-Host "Installing Action1 agent..."
+        Start-Process msiexec.exe -ArgumentList "/i `"$Action1TempPath`" /quiet /qn" -Wait
+        Remove-Item $Action1TempPath -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Action1 agent installed"
+    } catch {
+        Write-Warning "Action1 agent installation failed: $_"
+    }
+} else {
+    Write-Host "Action1 agent: skipped (no URL configured)"
 }
 Write-Host ""
 
