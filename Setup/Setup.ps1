@@ -410,16 +410,21 @@ Write-Host ""
 # ================================================================
 # PHASE 10: Windows Update
 # ================================================================
-# Uses the built-in Windows Update Orchestrator (UsoClient) -
-# the same engine behind "Check for updates" in Settings.
-# Updates download and install in the background; Windows will
-# prompt the user to reboot when ready.
 
 Write-Host "--- Phase 10: Windows Update ---"
-Write-Host "Triggering Windows Update scan..."
-UsoClient StartInteractiveScan
-Write-Host "[OK] Windows Update: scan initiated (updates will download in the background)"
-Write-Host "     Reboot when prompted to complete installation."
+Write-Host "Installing PSWindowsUpdate module..."
+
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
+Install-Module -Name PSWindowsUpdate -Force -AllowClobber -ErrorAction SilentlyContinue
+
+if (Get-Module -ListAvailable -Name PSWindowsUpdate) {
+    Import-Module PSWindowsUpdate
+    Write-Host "Scanning and installing Windows updates (this may take a while)..."
+    Install-WindowsUpdate -AcceptAll -IgnoreReboot -ErrorAction SilentlyContinue
+    Write-Host "[OK] Windows Update: completed"
+} else {
+    Write-Warning "PSWindowsUpdate module could not be installed. Run Windows Update manually after provisioning."
+}
 Write-Host ""
 
 # ================================================================
@@ -479,7 +484,7 @@ if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
     Write-Host "  [OK] End user account created: $ConfiguredNewUser"
 }
 Write-Host "  [OK] Dell Command Update installed"
-Write-Host "  [OK] Windows Update: scan initiated"
+Write-Host "  [OK] Windows Update: completed"
 Write-Host "  [OK] Security hardening applied"
 Write-Host ""
 

@@ -7,7 +7,8 @@ echo      Windows 11 Provisioning - Launcher
 echo ============================================
 echo.
 echo Waiting 5 minutes for system to fully initialize...
-timeout /t 300 /nobreak
+echo Press any key to skip the wait and start immediately.
+timeout /t 300
 echo.
 
 rem Scan all drive letters to find Setup.ps1 on the USB
