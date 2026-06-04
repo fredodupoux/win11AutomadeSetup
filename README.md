@@ -24,8 +24,10 @@ This project provisions a fresh Windows 11 machine with apps, security settings,
 win11AutomadeSetup/
 ├── Build-USB.ps1               # Generates autounattend.xml from config.ps1
 ├── Build-USB.cmd               # Double-click wrapper to run Build-USB.ps1
+├── Build-ISO.ps1               # Repacks Windows ISO with autounattend.xml baked in
+├── Build-ISO.cmd               # Double-click wrapper to run Build-ISO.ps1
 ├── autounattend.template.xml   # Template — DO NOT edit directly or put on USB
-├── autounattend.xml            # Generated output — this goes on the USB
+├── autounattend.xml            # Generated output — goes on USB or baked into ISO
 └── Setup/
     ├── Setup.ps1               # Main provisioning script
     ├── Launch-Setup.cmd        # Auto-launcher — fires after first login
@@ -158,6 +160,42 @@ USB root/
 - **Delete `autounattend.xml` from the USB** — it contains a plain-text password
 - Rotate the ITAdmin password
 - Remove the USB drive
+
+---
+
+---
+
+## Option C — KVM / Standalone ISO
+
+Use this to create a single self-contained ISO you can attach to a KVM/QEMU virtual machine or write to USB with Rufus.
+
+### Requirements
+
+- **Windows ADK** with the *Deployment Tools* component (provides `oscdimg.exe`)
+- Run as **Administrator**
+- Run `Build-USB.ps1` first to generate `autounattend.xml` and `config.ps1`
+
+### Steps
+
+1. Run `Build-USB.ps1` to generate `autounattend.xml` (if not already done)
+2. Double-click **`Build-ISO.cmd`** or run in an elevated PowerShell:
+
+```powershell
+.\Build-ISO.ps1
+```
+
+3. When prompted, paste the path to your stock Windows 11 ISO
+4. The script will mount the ISO, inject `autounattend.xml` + `Setup\`, repack with `oscdimg`, and output `Win11-<ComputerName>.iso`
+
+### Using the output ISO
+
+| Target | How |
+|---|---|
+| KVM/QEMU | Attach as a CD-ROM drive, set boot order to CD-ROM first |
+| Ventoy | Copy ISO to Ventoy USB — `autounattend.xml` is already baked in |
+| USB | Write with Rufus (GPT / UEFI, ISO image mode) |
+
+> **Warning:** The ISO contains `autounattend.xml` with a plain-text password. Do not share or store it insecurely. Delete it after provisioning.
 
 ---
 
