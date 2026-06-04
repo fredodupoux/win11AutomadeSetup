@@ -77,6 +77,13 @@ if (-not [string]::IsNullOrWhiteSpace($Config_TailscaleAuthKey)) {
     $TailscaleAuthKey = Read-Host "Enter Tailscale auth key (leave empty to skip)"
 }
 
+# 1.3 Action1 agent URL - use config value or prompt
+if (-not [string]::IsNullOrWhiteSpace($Config_Action1AgentUrl)) {
+    Write-Host "Action1 agent URL (from config): loaded"
+} else {
+    $Config_Action1AgentUrl = Read-Host "Enter Action1 agent MSI URL (leave empty to skip)"
+}
+
 # ================================================================
 # PHASE 2: Logging Setup
 # ================================================================
