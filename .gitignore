@@ -14,3 +14,4 @@ autounattend.xml
 # Windows
 Thumbs.db
 Desktop.ini
+Setup/config*.ps1
