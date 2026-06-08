@@ -35,15 +35,21 @@ Write-Host ""
 # config.ps1 can pre-set $Config_TailscaleAuthKey and $Config_PackageFile
 # so the IT admin is never prompted to type long values manually.
 $ConfigFile = Join-Path $PSScriptRoot "config.ps1"
-$Config_PackageFile    = ""
-$Config_WifiSSID       = ""
-$Config_WifiPassword   = ""
-$Config_TailscaleAuthKey = ""
-$Config_Action1AgentUrl = ""
-$Config_NewUsername    = ""
-$Config_NewFullName    = ""
-$Config_NewPassword    = ""
-$Config_NewUserIsAdmin = $false
+$Config_Organization       = ""
+$Config_Timezone           = ""
+$Config_ITAdminUsername    = ""
+$Config_ITAdminDisplayName = ""
+$Config_ITAdminPassword    = ""
+$Config_ComputerName       = ""
+$Config_PackageFile        = ""
+$Config_WifiSSID           = ""
+$Config_WifiPassword       = ""
+$Config_TailscaleAuthKey   = ""
+$Config_Action1AgentUrl    = ""
+$Config_NewUsername        = ""
+$Config_NewFullName        = ""
+$Config_NewPassword        = ""
+$Config_NewUserIsAdmin     = $false
 if (Test-Path $ConfigFile) {
     # Unblock the file in case Windows flagged it from USB/download
     Unblock-File -Path $ConfigFile -ErrorAction SilentlyContinue
@@ -134,9 +140,42 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 }
 Write-Host "[OK] winget available"
 
-# 3.4 WiFi Setup - connect before any network-dependent phase
+# 3.4 System Configuration - mirrors what autounattend.xml applies during install
 Write-Host ""
-Write-Host "--- Phase 3.4: WiFi Setup ---"
+Write-Host "--- Phase 3.4: System Configuration ---"
+
+$RebootRequired = $false
+
+if (-not [string]::IsNullOrWhiteSpace($Config_ComputerName)) {
+    if ($env:COMPUTERNAME -ne $Config_ComputerName) {
+        Rename-Computer -NewName $Config_ComputerName -Force -ErrorAction SilentlyContinue
+        $RebootRequired = $true
+        Write-Host "[OK] Computer renamed: $($env:COMPUTERNAME) -> $Config_ComputerName (reboot required)"
+    } else {
+        Write-Host "[OK] Computer name already correct: $Config_ComputerName"
+    }
+} else {
+    Write-Host "Computer name: skipped (not configured)"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($Config_Timezone)) {
+    Set-TimeZone -Id $Config_Timezone
+    Write-Host "[OK] Timezone: $Config_Timezone"
+} else {
+    Write-Host "Timezone: skipped (not configured)"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($Config_Organization)) {
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" `
+        -Name "RegisteredOrganization" -Value $Config_Organization
+    Write-Host "[OK] Registered organization: $Config_Organization"
+} else {
+    Write-Host "Registered organization: skipped (not configured)"
+}
+
+# 3.5 WiFi Setup - connect before any network-dependent phase
+Write-Host ""
+Write-Host "--- Phase 3.5: WiFi Setup ---"
 
 if (-not [string]::IsNullOrWhiteSpace($Config_WifiSSID)) {
     $WifiSSID     = $Config_WifiSSID
@@ -276,6 +315,29 @@ Write-Host ""
 # ================================================================
 
 Write-Host "--- Phase 7: User Management ---"
+
+# 7.0 IT admin account - mirrors the local account autounattend.xml creates during OOBE
+if (-not [string]::IsNullOrWhiteSpace($Config_ITAdminUsername)) {
+    $ITAdminExists = Get-LocalUser -Name $Config_ITAdminUsername -ErrorAction SilentlyContinue
+    if ($ITAdminExists) {
+        Write-Host "[OK] IT admin account already exists: $Config_ITAdminUsername"
+    } elseif ([string]::IsNullOrWhiteSpace($Config_ITAdminPassword)) {
+        Write-Warning "IT admin username configured but no password set - skipping account creation"
+    } else {
+        $ITAdminPassSecure = ConvertTo-SecureString $Config_ITAdminPassword -AsPlainText -Force
+        $Config_ITAdminPassword = $null
+        New-LocalUser `
+            -Name                $Config_ITAdminUsername `
+            -Password            $ITAdminPassSecure `
+            -FullName            $Config_ITAdminDisplayName `
+            -Description         "IT admin account" `
+            -PasswordNeverExpires:$true | Out-Null
+        Add-LocalGroupMember -Group "Administrators" -Member $Config_ITAdminUsername
+        [System.GC]::Collect()
+        Write-Host "[OK] IT admin account created: $Config_ITAdminUsername"
+    }
+}
+Write-Host ""
 
 $ConfiguredNewUser = ""
 
@@ -519,6 +581,10 @@ if (-not [string]::IsNullOrEmpty($ConfiguredNewUser)) {
 Write-Host "  [OK] Dell Command Update installed"
 Write-Host "  [OK] Windows Update: completed"
 Write-Host "  [OK] Security hardening applied"
+if ($RebootRequired) {
+    Write-Host ""
+    Write-Host "  [!] REBOOT REQUIRED: computer name change will take effect after restart"
+}
 Write-Host ""
 
 Stop-Transcript
