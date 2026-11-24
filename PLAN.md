@@ -3,7 +3,7 @@
 Single place to see **what's done, what's next, and what needs fixing**.
 Update this file in the same commit as the work it describes.
 
-**Status:** ✅ done · 🔄 in progress · ⬜ to do · 🧪 done but needs a hardware test · ❌ dropped
+**Status:** ✅ done · 🔄 in progress · ⬜ to do · 🧪 built, needs a test on real hardware / Windows · ❌ dropped · 👤 needs a decision or action from you
 
 **Last updated:** 2026-11-24
 
@@ -26,7 +26,8 @@ needs go in an optional per-client script.
 | D5 | **No Microsoft Store apps**: winget, direct installers, or Chrome web-app shortcuts only | 2026-11-24 |
 | D6 | **Auto sign-in is never left on** after setup (it signs in once so Setup.ps1 can run, then turns off) | 2026-11-24 |
 | D7 | Two media types: **clean install** (wipes disk) and **provisioning only** (PC at OOBE, mounted as CD-ROM) | 2026-11-24 |
-| D8 | Stack: **PowerShell 7 (`pwsh`)** for the UI server + existing build scripts, so techs install one runtime on Mac and Windows. Local only (`localhost`), never hosted | proposed |
+| D8 | Stack: **PowerShell 7** for the UI server and builds (techs install one runtime). Plain HTML/JS UI, no build step. Local only (`localhost`); `-Lan` opens only `/api/report` | 2026-11-24 |
+| D9 | Target-PC scripts (`Setup/*.ps1`) stay **Windows PowerShell 5.1** compatible (what a fresh Windows has); a test enforces it | 2026-11-24 |
 
 ---
 
@@ -35,85 +36,87 @@ needs go in an optional per-client script.
 | | What | Commit |
 |---|---|---|
 | ✅ | Provisioning-only flow: Shift+F10 → `D:\RUN <n>` → sysprep `/oobe` → unattended `Setup.ps1` | `b4d92fd` |
-| ✅ | `Setup.ps1 -Unattended` (no prompts), waits for winget + internet | `b4d92fd` |
 | ✅ | Windows Update moved last, retries, never blocks cleanup (fix for `0x80248007`) | `b4d92fd` |
-| ✅ | Non-Store apps: `installers.json` (SoWork machine-wide, WhatsApp Web shortcut) | `b4d92fd` |
-| ✅ | IT admin kept visible on the sign-in screen | `b4d92fd` |
-| ✅ | Per-client folders `clients/<name>/`, build output in `dist/<name>/`, one client per image | `58dfd94` |
-| ✅ | Auto sign-in always turned off at the end, stored password removed | `58dfd94` |
-| ✅ | Clean-install ISO no longer skips Windows Update on read-only media | `58dfd94` |
-| ✅ | README rewritten around the two media types | `58dfd94` |
+| ✅ | Non-Store apps (SoWork machine-wide, WhatsApp Web shortcut); IT admin kept visible | `b4d92fd` |
+| ✅ | Per-client folders, one client per image, auto sign-in always off at the end | `58dfd94` |
+| ✅ | Phase 1: `client.json` / `secrets.json` / `custom.ps1` / `batches.json`, feature switches, batches, migration, JSON-based `Setup.ps1` + `Provision-OOBE.ps1`, backup menu | `2cdbc6f` |
+| ✅ | Phase 2: ISO builds without the ADK (IMAPI2 on Windows, hdiutil on macOS), tech quick start | `2cdbc6f` |
+| ✅ | Phase 3: local web UI (clients, editor, winget search, batches, build, system) | `2cdbc6f` |
+| ✅ | Phase 4: PC progress reports + `status.json`, language/keyboard per client, WPA3/open/hidden WiFi | `2cdbc6f` |
+| ✅ | Tests: 84 sandboxed checks + 17-step headless-browser UI test, all passing on macOS | `2cdbc6f` |
+| ✅ | Real clients migrated locally: safitek, solima, berling (old files kept as `*.legacy`) | (local, gitignored) |
 
 ---
 
 ## Roadmap
 
-### Phase 1: Client data model (no UI yet)
-Turns each client into data that a UI can edit safely. Testable with the current builds.
+### Phase 1: Client data model
+| | ID | Task | Notes |
+|---|---|---|---|
+| ✅ | 1.1 | `client.json` schema | Defaults + validation in `lib/Provisioning.psm1` |
+| ✅ | 1.2 | `secrets.json` per client | Never written into `client.json`; copying a client never copies secrets |
+| ✅ | 1.3 | Feature switches | RDP, SMBv1, firewall, screen lock, auto updates, Dell CU, Windows Update, Action1, Tailscale, custom script |
+| ✅ | 1.4 | Batches | Pattern `ACME-PC-##`, range, overrides (WiFi, end user), per-PC status |
+| ✅ | 1.5 | Custom script | `custom.ps1`, runs before Windows Update; failure is reported, setup continues |
+| ✅ | 1.6 | Scripts read JSON | `Setup.ps1` (rewritten: isolated steps, never prompts), `Provision-OOBE.ps1`, builds |
+| ✅ | 1.7 | Migration | `tools/Convert-LegacyConfig.ps1`; run on safitek / solima / berling |
+| ✅ | 1.8 | Backup menu | `Launch-Setup-GUI.ps1` edits the JSON files; old `return if` bug fixed |
+| 🧪 | 1.9 | Hardware test | Build SAFITEK from the UI, provision one PC → see *To verify* F1–F5, F15 |
 
-| | ID | Task |
-|---|---|---|
-| ⬜ | 1.1 | Design `client.json` schema: company, accounts, WiFi, remote mgmt, apps (winget / installers / web apps), feature switches, custom script |
-| ⬜ | 1.2 | `secrets.json` per client (IT admin / end user / WiFi passwords, Tailscale key, Action1 URL); gitignored |
-| ⬜ | 1.3 | Feature switches instead of hard-coded steps: RDP, SMBv1 off, Dell Command Update, Windows Update, screen lock, must-change-password, Tailscale |
-| ⬜ | 1.4 | Batch file: name pattern, start/end number, optional per-batch overrides (WiFi, end user), record of PC → number |
-| ⬜ | 1.5 | Optional per-client custom script (`custom.ps1`), run near the end of `Setup.ps1` with its output logged |
-| ⬜ | 1.6 | `Setup.ps1`, `Provision-OOBE.ps1`, `Build-*.ps1` read JSON instead of `config.ps1` |
-| ⬜ | 1.7 | One-time migration: `clients/*/config.ps1` → `client.json` + `secrets.json` |
-| ⬜ | 1.8 | Update `Launch-Setup-GUI.ps1` (backup tool) to the new format, then commit it |
-| ⬜ | 1.9 | Hardware test: build SAFITEK from JSON and provision one PC |
-
-### Phase 2: Cross-platform builds (techs on Windows)
-| | ID | Task |
-|---|---|---|
-| ⬜ | 2.1 | Provisioning ISO on Windows **without the ADK** (built-in IMAPI2 instead of `oscdimg`) |
-| ⬜ | 2.2 | Investigate building the clean-install (bootable) ISO without the ADK, or on macOS |
-| ⬜ | 2.3 | One-line install/start instructions for techs (install `pwsh`, run the UI) on Mac and Windows |
+### Phase 2: Cross-platform builds
+| | ID | Task | Notes |
+|---|---|---|---|
+| 🧪 | 2.1 | Provisioning ISO on Windows without the ADK | IMAPI2 implemented; not yet run on Windows (F16) |
+| 🧪 | 2.2 | Clean-install ISO without the ADK | Windows: IMAPI2 with BIOS + UEFI boot (F6, F16). macOS: not possible (needs UDF for the >4 GB image) → use the USB folder |
+| ✅ | 2.3 | Tech quick start | README + `Start-UI.cmd` / `Start-UI.command` (check for PowerShell 7) |
 
 ### Phase 3: Local web UI
-| | ID | Task |
-|---|---|---|
-| ⬜ | 3.1 | `pwsh` local server (`Start-UI.ps1`), opens the browser at `localhost`; Mac + Windows |
-| ⬜ | 3.2 | Clients screen: list, new from template, duplicate |
-| ⬜ | 3.3 | Client editor with checks: name ≤ 15 chars, timezone picker, password rules, required fields |
-| ⬜ | 3.4 | Apps: search the real winget catalog (works offline on Mac); flag IDs that don't exist |
-| ⬜ | 3.5 | Build screen: pick batch + media type → build → output path + per-PC instructions |
-| ⬜ | 3.6 | Batches screen: PCs, numbers used, dates |
+| | ID | Task | Notes |
+|---|---|---|---|
+| ✅ | 3.1 | `Start-UI.ps1` server | macOS tested; Windows run pending (F16) |
+| ✅ | 3.2 | Clients screen | New from template, copy of a client |
+| ✅ | 3.3 | Client editor + checks | Live validation, unsaved-changes guard |
+| ✅ | 3.4 | winget catalog search / ID check | Official index, cached 7 days; also warns at build time |
+| ✅ | 3.5 | Build screen | Background jobs, log, output, next steps, "Show" in Finder/Explorer |
+| ✅ | 3.6 | Batches screen | Per-PC tiles, manual status, auto-refresh |
 
 ### Phase 4: Later
-| | ID | Task |
-|---|---|---|
-| ⬜ | 4.1 | Each finished PC reports back (status file or Action1) → ✅ per PC on the batch screen |
-| ⬜ | 4.2 | Locale/keyboard per client (answer file is hard-coded to `en-US`) |
-| ⬜ | 4.3 | WPA3 / enterprise WiFi (currently WPA2-PSK only) |
+| | ID | Task | Notes |
+|---|---|---|---|
+| 🧪 | 4.1 | PCs report back | `status.json` on the PC + POST to the UI with `-Lan` (F17) |
+| 🧪 | 4.2 | Locale/keyboard per client | Answer files use the client's language/keyboard |
+| 🧪 | 4.3 | WPA3 WiFi | WPA3-Personal, open, hidden: done. Enterprise 802.1X: ❌ dropped (needs per-user credentials; revisit if a client needs it) |
 
 ---
 
 ## To verify / fix
 
-Things already built but not yet proven on hardware, plus known issues.
-
 | | ID | Item | Notes |
 |---|---|---|---|
-| 🧪 | F1 | Auto sign-in **once** after the sysprep reboot | Passwordless-only setting turned off before sysprep; confirm itsupport signs in without typing |
-| 🧪 | F2 | Windows Update retry / fallback | Confirm no crash on `0x80248007`, cleanup + reboot still happen |
-| 🧪 | F3 | SoWork silent install (`/S`) | `/S` is the installer type's standard switch but undocumented by SoWork; confirm it appears for `csagent` |
-| 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users; opens in its own window |
+| 🧪 | F1 | Auto sign-in **once** after the sysprep reboot | Passwordless-only setting turned off before sysprep / in the clean-install answer file |
+| 🧪 | F2 | Windows Update retry / fallback | Confirm no crash on `0x80248007`; summary + cleanup still run |
+| 🧪 | F3 | SoWork silent install (`/S`) | Undocumented switch; confirm it's installed for `csagent` |
+| 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users |
 | 🧪 | F5 | Auto sign-in OFF after the final reboot | PC must stop at the sign-in screen |
-| 🧪 | F6 | Clean-install ISO after the refactor | `Build-ISO.ps1 -Client safitek` on Windows + ADK, boot in a VM |
-| ⬜ | F7 | PCs set up with the earlier Autologon build still sign in automatically | Run on each: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f` |
-| ⬜ | F8 | Clean install prompts for the Tailscale key when it's blank | Treat a blank config value as "skip" (solved by 1.3) |
-| ⬜ | F9 | Berling app list unknown | `clients/berling/packages.json` is a copy of the default list; confirm |
-| ⬜ | F10 | SAFITEK timezone | Set to `Eastern Standard Time`; if the PCs are in Haiti, `Haiti Standard Time` exists |
-| ⬜ | F11 | SAFITEK WiFi | Config uses `((( Bat Radar )))`; confirm it's the site network |
-| ⬜ | F12 | Push `main` to GitHub | Local `main` is 3 commits ahead of `origin/main` |
-| ⬜ | F13 | Passwords are plain text on every USB/ISO | Inherent to answer files; keep media private, delete after use. Revisit in Phase 1 |
+| 🧪 | F6 | Clean-install ISO | `Build-ISO.ps1` / UI on Windows as Administrator, boot in a VM |
+| 👤 | F7 | PCs set up with the earlier Autologon build still sign in automatically | Run on each: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f` |
+| ✅ | F8 | Clean install prompted for a blank Tailscale key | `Setup.ps1` never prompts; blank = skipped |
+| 👤 | F9 | Berling app list unknown | `clients/berling` got the default list; confirm in the UI |
+| 👤 | F10 | SAFITEK timezone | `Eastern Standard Time`; if the PCs are in Haiti, pick `Haiti Standard Time` in the UI |
+| 👤 | F11 | SAFITEK WiFi | `((( Bat Radar )))`: confirm it's the site network |
+| 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only |
+| ✅ | F13 | Passwords on media | Mitigated: secrets separated, never in git, deleted from the PC after a provisioning run. Media itself still holds them: keep it private |
+| 👤 | F14 | Berling name pattern too long | `BERLING-PROD-PC##` gives 17 characters (Windows max 15). The UI blocks builds until it's shortened, e.g. `BERLING-PRD-##` |
+| 🧪 | F15 | New `Setup.ps1` on a real PC | Rewritten (JSON, isolated steps, status file); run one PC end to end and read `C:\ProgramData\Provisioning\status.json` |
+| 🧪 | F16 | UI + builds on a Windows tech machine | Start-UI, winget search (uses `winsqlite3.dll`), provisioning ISO via IMAPI2 |
+| 🧪 | F17 | Progress reports over the network | UI with `-Lan`, build with "PCs report their progress", watch the batch tiles; Windows may ask to allow PowerShell through the firewall |
+| 👤 | F18 | Media built before `2cdbc6f` | Old ISOs/USBs carry their own old scripts + `config.ps1` and keep working the old way, without batches/reports/status. Rebuild from the UI to get the new behaviour (e.g. `dist/safitek/SAFITEK-Provision.iso` is the old one) |
 
 ---
 
 ## How we use this file
 
 - **Starting work:** mark the task 🔄.
-- **Finishing:** mark it ✅ (or 🧪 if it still needs a real PC) and add the commit to *Done*.
+- **Finishing:** mark it ✅ (or 🧪 if it still needs a real PC / Windows) and add the commit to *Done*.
 - **New bug or request:** add an `F` row (to fix) or a roadmap row; never fix silently.
 - **Decisions:** add a `D` row with the date so we don't re-discuss settled questions.
