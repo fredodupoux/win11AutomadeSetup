@@ -2,11 +2,10 @@
 # config.ps1 - Local provisioning configuration
 # ==============================================================
 # HOW TO USE:
-#   1. Copy this file and rename the copy to: config.ps1
-#   2. Fill in your values below
-#   3. Run Build-USB.ps1 - it reads this file to generate
-#      autounattend.xml AND pre-fills Setup.ps1 variables
-#   4. config.ps1 is gitignored - it will never be committed
+#   One folder per client: clients\<client>\config.ps1 (+ packages.json,
+#   optional installers.json). Build-USB.ps1 -Client <client> creates the
+#   folder from this example and prompts for missing values.
+#   Everything under clients\ except _example is gitignored.
 #
 # Any value left as "" falls back to an interactive prompt
 # at runtime (Setup.ps1 only - autounattend values are required).

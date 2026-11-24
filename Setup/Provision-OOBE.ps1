@@ -231,7 +231,7 @@ if ($Name) {
 New-Item -ItemType Directory -Path $Target -Force | Out-Null
 icacls $Target /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
 
-$StageFiles = @('Setup.ps1', $Config_PackageFile, 'installers.json', 'Autologon.exe')
+$StageFiles = @('Setup.ps1', $Config_PackageFile, 'installers.json')
 foreach ($f in $StageFiles) {
     $src = Join-Path $UsbSetup $f
     if (Test-Path $src) { Copy-Item -Path $src -Destination $Target -Force }

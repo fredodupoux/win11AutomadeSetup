@@ -1,377 +1,180 @@
 # win11AutomadeSetup
 
-> Automated Windows 11 provisioning — from bare metal to ready-to-use in one boot. No clicking through OOBE, no OEM bloat, no Microsoft account required.
+> Automated Windows 11 provisioning for small business PCs: apps, Action1, users, WiFi, security settings and Windows Update. No clicking through OOBE, no Microsoft account.
 
 ---
 
-## Overview
+## Two kinds of media, one setup script
 
-This project provisions a fresh Windows 11 machine with apps, security settings, VPN, and user accounts — all scripted and repeatable.
-
-| | Option A — Full Reinstall | Option B — Existing Install |
+| | **Clean install** | **Provisioning only** |
 |---|---|---|
-| **When to use** | New machine or wipe OEM image | Machine already has Windows 11 |
-| **OOBE bypass** | Fully automated | Manual (see below) |
-| **Hands-on time** | ~5 min prep, walk away | ~10 min |
-| **OEM bloat** | Gone | Still there |
-| **What you need** | USB drive + Windows 11 ISO | USB or network share |
+| **Use when** | New PC, or you want to wipe the OEM image | Windows 11 is already installed and the PC is at the OOBE ("Let's set things up") screen |
+| **Build** | `Build-USB.ps1 -Client <name>` → USB folder, then optionally `Build-ISO.ps1 -Client <name>` → bootable ISO | `Build-ProvisionISO.ps1 -Client <name>` → small data ISO |
+| **Build on** | USB folder: Mac or Windows. ISO: Windows + ADK + a stock Windows 11 ISO | Mac or Windows |
+| **Disk** | **Wiped** | Kept: Windows, drivers and activation are kept |
+| **Hands-on per PC** | Boot from the USB/ISO | Shift+F10 → `D:\RUN 3` |
+| **Computer names** | Auto-incremented on a writable USB | PC number typed at `RUN` (ISO is read-only) |
+
+Both end up running the same [`Setup/Setup.ps1`](Setup/Setup.ps1) with the client's `config.ps1`.
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 win11AutomadeSetup/
-├── Build-USB.ps1               # Generates autounattend.xml from config.ps1
-├── Build-USB.cmd               # Double-click wrapper to run Build-USB.ps1
-├── Build-ISO.ps1               # Repacks Windows ISO with autounattend.xml baked in
-├── Build-ISO.cmd               # Double-click wrapper to run Build-ISO.ps1
-├── autounattend.template.xml   # Template — DO NOT edit directly or put on USB
-├── autounattend.xml            # Generated output — goes on USB or baked into ISO
-└── Setup/
-    ├── Setup.ps1               # Main provisioning script
-    ├── Launch-Setup.cmd        # Auto-launcher — fires after first login
-    ├── packages.json           # App list for winget
-    ├── config.example.ps1      # Config template — copy to config.ps1
-    └── config.ps1              # Your local secrets (gitignored, never committed)
+├── Build-USB.ps1              # clean install: answer file + USB folder for a client
+├── Build-ISO.ps1 / .cmd       # clean install: bake that folder into a bootable ISO (Windows + ADK)
+├── Build-ProvisionISO.ps1     # provisioning only: small ISO for PCs at the OOBE screen
+├── Build-Common.ps1           # shared helpers (client selection, Setup\ staging)
+├── autounattend.template.xml  # answer-file template, placeholders only
+├── Setup/                     # generic scripts, the same for every client
+│   ├── Setup.ps1              #   the provisioning script
+│   ├── Launch-Setup.cmd       #   clean install: starts Setup.ps1 after first login
+│   └── Provision-OOBE.ps1/.cmd#   provisioning only: run from Shift+F10 at OOBE
+├── clients/                   # one folder per client (gitignored except _example)
+│   ├── _example/              #   config.ps1, packages.json, installers.json templates
+│   └── safitek/               #   config.ps1, packages.json, installers.json (optional)
+└── dist/                      # build output (gitignored - contains passwords)
+    └── safitek/
+        ├── usb/               #   autounattend.xml + Setup\  (copy to a USB root)
+        ├── Win11-*.iso        #   clean-install ISO
+        └── SAFITEK-Provision.iso
 ```
+
+Each image only contains **one** client's files.
 
 ---
 
-## How It Works (Option A — Full Reinstall)
+## Client folder
 
-```
-Build-USB.ps1
-    │  reads config.ps1
-    │  prompts for any missing values
-    │  writes autounattend.xml
-    ▼
-USB Drive
-    │  autounattend.xml at root
-    │  Setup/ folder at root
-    ▼
-Boot target machine from USB
-    │
-    ├─ windowsPE pass  →  sets locale, partitions disk, installs Windows
-    │
-    ├─ specialize pass →  sets computer name + timezone
-    │                     registers RunOnce key → points to Launch-Setup.cmd
-    │
-    ├─ oobeSystem pass →  skips all OOBE screens
-    │                     creates ITAdmin local account
-    │                     auto-logs in as ITAdmin (once)
-    │
-    └─ First login     →  RunOnce fires Launch-Setup.cmd
-                          waits 5 min for system to initialize
-                          sets PowerShell execution policy to RemoteSigned
-                          runs Setup.ps1 from USB automatically
-                          Setup.ps1 installs apps, configures VPN,
-                          creates user account, hardens security,
-                          triggers Windows Update, increments
-                          computer name on USB for next machine
-```
+`clients/<client>/`:
 
----
-
-## Step-by-Step: Option A — Full Reinstall via USB
-
-### Step 1 — Fill in your config
-
-Copy `Setup/config.example.ps1` to `Setup/config.ps1` and fill in your values:
-
-```powershell
-# Key fields to set:
-$Config_Organization       = "Your Company"
-$Config_ITAdminUsername    = "itadmin"
-$Config_ITAdminPassword    = ""           # prompted if blank
-$Config_Timezone           = "Eastern Standard Time"
-$Config_WindowsEdition     = "Windows 11 Pro"
-$Config_ComputerName       = "PC-HOSTNAME" # max 15 chars, letters/numbers/hyphens
-$Config_TailscaleAuthKey   = ""           # optional VPN
-$Config_WifiSSID           = ""           # optional WiFi profile
-$Config_NewUsername        = ""           # end user account
-$Config_NewFullName        = ""
-$Config_NewPassword        = ""
-$Config_NewUserIsAdmin     = $false
-```
-
-`config.ps1` is gitignored — it will never be committed.
-
-> **Computer name rules:** max 15 characters, letters, numbers, and hyphens only. No spaces.
-
-### Step 2 — Run Build-USB.ps1
-
-On Windows, double-click **`Build-USB.cmd`** or run in PowerShell:
-
-```powershell
-.\Build-USB.ps1
-```
-
-On macOS/Linux (for preparing USB from another machine):
-
-```bash
-brew install powershell
-pwsh ./Build-USB.ps1
-```
-
-The script will:
-- Load any values already in `config.ps1`
-- Prompt for anything missing (passwords are masked)
-- Write all values back to `config.ps1`
-- Generate `autounattend.xml` from the template with your values substituted in
-
-### Step 3 — Write the Windows 11 ISO to USB
-
-1. Download the [Windows 11 ISO](https://www.microsoft.com/software-download/windows11)
-2. Download [Rufus](https://rufus.ie) and write the ISO to a USB drive (8 GB+):
-   - Partition scheme: **GPT**
-   - Target system: **UEFI (non-CSM)**
-   - Click **START** — when prompted, choose **"Write in ISO image mode"**
-
-### Step 4 — Copy files to the USB root
-
-After Rufus finishes, copy these files to the **root of the USB drive**:
-
-```
-USB root/
-├── autounattend.xml        ← generated by Build-USB.ps1
-└── Setup/                  ← the entire Setup/ folder
-    ├── Setup.ps1
-    ├── Launch-Setup.cmd
-    ├── packages.json
-    ├── config.example.ps1
-    └── config.ps1          ← your filled-in config (stays on USB only)
-```
-
-### Step 5 — Boot and walk away
-
-1. Plug the USB into the target machine
-2. Power on and boot from USB (F12 on Dell for boot menu)
-3. Windows installs fully automatically — no interaction needed
-4. The machine reboots, logs in as ITAdmin, and after ~5 minutes **Setup.ps1 launches automatically** in a PowerShell window
-5. Follow the prompts for any values not pre-filled in `config.ps1`:
-   - Tailscale auth key (if not in config)
-   - End user account details (if not in config)
-   - IT admin account to hide from login screen
-
-### Step 6 — After provisioning
-
-- Wait for Setup.ps1 to complete and display its summary
-- **Delete `autounattend.xml` from the USB** — it contains a plain-text password
-- Rotate the ITAdmin password
-- Remove the USB drive
-
----
-
----
-
-## Option C — KVM / Standalone ISO
-
-Use this to create a single self-contained ISO you can attach to a KVM/QEMU virtual machine or write to USB with Rufus.
-
-### Requirements
-
-- **Windows ADK** with the *Deployment Tools* component (provides `oscdimg.exe`)
-- Run as **Administrator**
-- Run `Build-USB.ps1` first to generate `autounattend.xml` and `config.ps1`
-
-### Steps
-
-1. Run `Build-USB.ps1` to generate `autounattend.xml` (if not already done)
-2. Double-click **`Build-ISO.cmd`** or run in an elevated PowerShell:
-
-```powershell
-.\Build-ISO.ps1
-```
-
-3. When prompted, paste the path to your stock Windows 11 ISO
-4. The script will mount the ISO, inject `autounattend.xml` + `Setup\`, repack with `oscdimg`, and output `Win11-<ComputerName>.iso`
-
-### Using the output ISO
-
-| Target | How |
+| File | Purpose |
 |---|---|
-| KVM/QEMU | Attach as a CD-ROM drive, set boot order to CD-ROM first |
-| Ventoy | Copy ISO to Ventoy USB — `autounattend.xml` is already baked in |
-| USB | Write with Rufus (GPT / UEFI, ISO image mode) |
+| `config.ps1` | Organization, accounts, passwords, WiFi, computer name, Action1 URL. See the reference below |
+| `packages.json` | winget apps (`winget search <app>` to find IDs) |
+| `installers.json` | *Optional.* Apps not in winget: direct-download installers (machine-wide) and web apps (Chrome `--app` shortcuts for all users). No Microsoft Store apps |
 
-> **Warning:** The ISO contains `autounattend.xml` with a plain-text password. Do not share or store it insecurely. Delete it after provisioning.
-
----
-
-## Step-by-Step: Option B — Existing Windows 11 Install
-
-Use this when the machine already has Windows 11.
-
-### Skip the Microsoft account during OOBE (if not yet set up)
-
-**Windows 11 Pro:**
-> Setup screen → *"Sign in with Microsoft"* → click **"Sign-in options"** → **"Domain join instead"** → create a local account
-
-**Windows 11 Home:**
-> Press `Shift + F10` to open a command prompt → type `oobe\bypassnro` → Enter → PC restarts → choose **"I don't have internet"** → **"Continue with limited setup"** → create a local account
-
-### Run Setup.ps1 manually
-
-1. Copy the `Setup/` folder to the machine or keep it on a USB drive
-2. Open **PowerShell as Administrator**
-3. Run:
-
-```powershell
-Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
-powershell.exe -ExecutionPolicy Bypass -File "D:\Setup\Setup.ps1"
-```
-
-Replace `D:` with the actual drive letter where the Setup folder is located.
+New client: `pwsh ./Build-USB.ps1 -Client acme` creates `clients/acme/` from `_example` and prompts for the required values.
 
 ---
 
-## Step-by-Step: Option C — PC stuck at OOBE, no reinstall (fully unattended)
+## Clean install (wipes the disk)
 
-Use this when Windows 11 is already installed and the PC is sitting at the
-"Let's set things up" / "Who's going to use this device?" screen.
+1. **Build the USB folder.** On Mac: `brew install powershell`, then
+   ```bash
+   pwsh ./Build-USB.ps1 -Client safitek
+   ```
+   This prompts for missing values, saves them to `clients/safitek/config.ps1` and creates `dist/safitek/usb/` (`autounattend.xml` + `Setup\`).
+2. **Make the media.** Either:
+   - **USB:** write a [stock Windows 11 ISO](https://www.microsoft.com/software-download/windows11) with [Rufus](https://rufus.ie) (GPT / UEFI, ISO image mode), then copy the **contents** of `dist/safitek/usb/` to the USB root. Or:
+   - **Bootable ISO** (KVM / VM / Ventoy). On Windows with the ADK Deployment Tools, in an elevated PowerShell: `.\Build-ISO.ps1 -Client safitek`. It asks for the stock ISO path and writes `dist/safitek/Win11-<name>.iso`.
+3. **Boot the PC from it.** Windows installs, creates the IT admin, signs in once, and ~5 minutes later `Setup.ps1` runs. It only prompts for values missing from `config.ps1`.
+4. **After it finishes:** delete `autounattend.xml` and `Setup\config.ps1` from the USB (plain-text passwords). On a USB stick the computer name in `autounattend.xml` is already incremented for the next PC.
 
-**Media prep:** `pwsh ./Build-ProvisionISO.ps1` builds `<ORG>-Provision.iso` with
-`Setup.ps1`, `Provision-OOBE.*`, the package file, `installers.json`,
-`Autologon.exe` (Sysinternals) and **this client's** `config.ps1`.
-Set `$Config_ComputerName` to the first name, e.g. `SAFITEKHT-CS-01`.
-Mount the ISO on the IP KVM as **CD-ROM** (not flash drive). A USB stick with the
-same `Setup\` folder also works and auto-increments the name.
+---
 
-**Per PC (~1 min hands-on):**
-1. Mount the ISO, power on, wait for the OOBE screen, press **Shift + F10**
-2. Type `D:\RUN 3` (3 = PC number → `SAFITEKHT-CS-03`); from a USB stick: `D:\Setup\Provision-OOBE.cmd`
-3. The PC reboots → unmount → go to the next PC
+## Provisioning only (PC at the OOBE screen, no reinstall)
 
-**What happens next, on its own:**
+1. **Build:** `pwsh ./Build-ProvisionISO.ps1 -Client safitek` creates `dist/safitek/SAFITEK-Provision.iso`. Set the name pattern first in `config.ps1`, e.g. `$Config_ComputerName = 'SAFITEKHT-CS-01'`.
+2. **Mount it on the IP KVM as CD-ROM.** In "flash drive" mode Windows says *"The volume does not contain a recognized file system"*.
+3. **Per PC:** power on, wait for the OOBE screen, press **Shift+F10**, type `D:\RUN 3` (3 = PC number → `SAFITEKHT-CS-03`). The PC reboots; unmount and go to the next PC.
+
+What happens next, on its own:
+
 ```
 Provision-OOBE.ps1  (from the OOBE command prompt)
-    ├─ assigns next computer name, logs it in Setup\provisioned-machines.csv
-    │  (keyed by MAC - re-running on the same PC reuses its name) and bumps config.ps1
+    ├─ computer name from the PC number (or a ledger + counter when run from a USB stick)
     ├─ copies this client's files to C:\Setup (Administrators-only)
-    └─ sysprep /oobe /unattend  (no /generalize - Windows, drivers, activation kept)
-Reboot → OOBE skipped → IT admin account created → auto-logon once
-    └─ Setup.ps1 -Unattended
-         WiFi → wait for internet → winget apps → installers.json
-         (SoWork machine-wide, WhatsApp Web as a Chrome app shortcut for all
-         users - no Microsoft Store apps) → end user (must change password at
-         first login) → hardening → Action1 → Windows Update (retries, never
-         blocks the rest) → permanent IT admin auto-logon via Autologon.exe
-         → cleanup (C:\Setup + answer files with passwords removed) → reboot
+    └─ sysprep /oobe /unattend   (no /generalize: Windows, drivers, activation kept)
+Reboot → OOBE skipped → IT admin created → signs in automatically ONCE
+    └─ Setup.ps1 -Unattended  (never prompts)
+         → cleanup → reboot to the sign-in screen
 ```
 
-If sysprep refuses to run, the script prints the sysprep error log and the manual fallback.
-Log: `C:\Users\<itadmin>\win_setup_*.log`.
+If sysprep refuses to run, the script prints its error log and a manual fallback.
 
-Auto-logon stays on after provisioning (password stored encrypted by Autologon).
-To turn it off on a PC: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f`
+### PC already set up (OOBE done by hand)
+
+Copy a client's staged `Setup\` folder (`dist/<client>/usb/Setup`) to the PC, open PowerShell **as Administrator** and run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Setup.ps1
+```
 
 ---
 
-## What Setup.ps1 Does
+## What Setup.ps1 does
 
 | Phase | Action |
 |---|---|
-| 1 — Config | Loads `config.ps1` if present; prompts for any missing values |
-| 2 — Logging | Creates a timestamped log at `%USERPROFILE%\win_setup_*.log` |
-| 3 — Pre-flight | Verifies Windows 11 build, admin rights, winget availability |
-| 3.4 — WiFi | Configures WPA2 WiFi profile if SSID provided |
-| 4 — Packages | Updates winget sources |
-| 5 — VPN | Installs and authenticates Tailscale (if auth key provided) |
-| 6 — Apps | Installs all applications from `packages.json` via `winget import` |
-| 7 — Users | Hides IT admin account from login screen; creates end-user account |
-| 8 — Security | Enables auto-updates, firewall, screen lock, Remote Desktop; disables SMBv1 |
-| 9 — Dell Command Update | Installs Dell Command Update explicitly via winget (resolves .NET timing issue with `winget import`) |
-| 10 — Windows Update | Triggers Windows Update via `UsoClient StartInteractiveScan` (native update engine — updates download in the background) |
-| 11 — USB name increment | Reads `autounattend.xml` on the USB and increments the trailing number in `<ComputerName>` so the next machine gets a unique name automatically |
-| 12 — Summary | Displays log file path and summary of all actions taken |
+| 1–3 | Load `config.ps1`, start log, check Windows 11 / admin / winget (waits for winget on a new profile) |
+| 3.4 | Computer name, timezone, registered organization |
+| 3.5 | WiFi profile (WPA2), then waits for internet |
+| 4–5 | winget sources; Tailscale if an auth key is set |
+| 6 | winget apps from `packages.json` |
+| 6.5 | `installers.json`: direct-download installers and web-app shortcuts |
+| 7 | IT admin account (kept enabled and **visible** on the sign-in screen); end user as standard user who must change the password at first login |
+| 8 | Security settings (below) |
+| 9 | Dell Command Update (Dell hardware only) |
+| 10 | Action1 agent |
+| 11 | Clean install from a writable USB: increment the computer name for the next PC |
+| 11.5 | Windows Update, last: retries, skips drivers if they fail, falls back to Windows' own updater. A failure never stops the script |
+| 12 | Summary |
+| 12.5 | **Auto sign-in turned off**, stored password removed (always, every client) |
+| 13 | Provisioning only: delete answer files, `config.ps1` and `C:\Setup`; reboot |
+
+Log: `C:\Users\<itadmin>\win_setup_*.log`
 
 ---
 
-## config.ps1 Reference
+## config.ps1 reference
 
 | Variable | Used by | Description |
 |---|---|---|
-| `Config_Organization` | autounattend.xml | Company name shown during install |
-| `Config_WindowsEdition` | autounattend.xml | Must match ISO image name exactly |
-| `Config_Timezone` | autounattend.xml | Windows timezone ID |
-| `Config_ITAdminUsername` | autounattend.xml | Local admin account created during OOBE |
-| `Config_ITAdminDisplayName` | autounattend.xml | Display name for IT admin account |
-| `Config_ITAdminPassword` | autounattend.xml | Temporary password — rotate after provisioning |
-| `Config_ComputerName` | autounattend.xml | Machine hostname, set during specialize pass |
-| `Config_PackageFile` | Setup.ps1 | Winget import file (default: `packages.json`) |
-| `Config_WifiSSID` | Setup.ps1 | WiFi network to connect to (optional) |
-| `Config_WifiPassword` | Setup.ps1 | WiFi password (optional) |
-| `Config_TailscaleAuthKey` | Setup.ps1 | Tailscale pre-auth key (optional) |
-| `Config_NewUsername` | Setup.ps1 | End user account username |
-| `Config_NewFullName` | Setup.ps1 | End user full name |
-| `Config_NewPassword` | Setup.ps1 | End user password (optional, prompted if blank) |
-| `Config_NewUserIsAdmin` | Setup.ps1 | `$true` to add end user to Administrators |
+| `Config_Organization` | both | Company name |
+| `Config_WindowsEdition` | clean install | Must match the ISO image name, e.g. `Windows 11 Pro` |
+| `Config_Timezone` | both | Windows timezone ID (`Get-TimeZone -ListAvailable`) |
+| `Config_ITAdminUsername` / `DisplayName` / `Password` | both | Local IT admin account |
+| `Config_ComputerName` | both | Max 15 chars. A trailing number (`-01`) enables numbering |
+| `Config_PackageFile` | Setup.ps1 | winget list in the client folder (default `packages.json`) |
+| `Config_WifiSSID` / `WifiPassword` | Setup.ps1 | Optional WPA2 WiFi |
+| `Config_TailscaleAuthKey` | Setup.ps1 | Optional; use `''` to skip |
+| `Config_Action1AgentUrl` | Setup.ps1 | Optional Action1 agent MSI link |
+| `Config_NewUsername` / `NewFullName` / `NewPassword` | Setup.ps1 | End user account; must change password at first login |
+| `Config_NewUserIsAdmin` | Setup.ps1 | `$true` = Administrators, `$false` = standard user |
 
 ---
 
-## Default Apps (`packages.json`)
+## Security settings applied
 
-| Category | Apps |
-|---|---|
-| Browser | Google Chrome, Mozilla Firefox |
-| Comms | Slack, Zoom, Microsoft Teams |
-| Productivity | Hubstaff |
-| Remote Access | AnyDesk |
-| Utilities | 7-Zip, Notepad++, VLC |
-| Security | Bitdefender, Tailscale |
-| Hardware | Dell Command Update |
-
-Edit `packages.json` freely — add or remove entries using `winget search <appname>` to find the correct Package ID.
-
----
-
-## Security Hardening Applied
-
-- Windows Update set to auto-download and install
-- Firewall enabled on all profiles (Domain, Public, Private)
-- Password required on wake / screen lock
+- Windows Update: automatic download and install
+- Firewall on for all profiles
+- Password required on wake
 - Remote Desktop enabled (with firewall rule)
 - SMBv1 disabled
-- IT admin account kept enabled and visible on the sign-in screen
-- Log file permissions restricted to owner only (equivalent to chmod 600)
+- Auto sign-in off after setup; IT admin stays visible on the sign-in screen
+- Log file readable by its owner only
 
----
+## Security notes
 
-## Tested Hardware
+- `clients/` (except `_example`) and `dist/` are gitignored: they hold plain-text passwords. Never commit them.
+- Every USB folder and ISO in `dist/` contains passwords. Keep them private and delete them from KVM storage / USB sticks when done.
+- Use a temporary IT admin password and rotate it after provisioning.
 
-| Model | Status | Notes |
-|---|---|---|
-| Dell OptiPlex 3070 MFF | Supported | No driver injection needed. Windows Update covers Intel I219 NIC, UHD 630, Realtek audio. Dell Command Update handles BIOS and firmware. |
-| Dell OptiPlex 5070 MFF | Supported | Same as above |
+## Tested hardware
 
----
-
-## Security Notes
-
-- `autounattend.xml` contains the ITAdmin password in **plain text**. It is only used on the USB during provisioning — delete it from the USB when done.
-- `config.ps1` is gitignored and must never be committed to version control.
-- Use a temporary ITAdmin password and rotate it immediately after provisioning completes.
-- The `autounattend.template.xml` in the repo contains only placeholders — no credentials.
-
----
-
-## Contributing
-
-Pull requests are welcome. If you test on additional hardware or add support for new Dell models, open a PR with your results.
-
-1. Fork the repo
-2. Create a branch: `git checkout -b feature/your-feature`
-3. Commit and push
-4. Open a Pull Request
+| Model | Notes |
+|---|---|
+| Dell OptiPlex 3070 / 5070 MFF | No driver injection needed; Dell Command Update handles BIOS and firmware |
+| Lenovo mini PCs (SAFITEK) | Provisioning-only flow via IP KVM |
 
 ---
 
 ## License
 
-MIT License — free to use, modify, and distribute.
-
----
+MIT License: free to use, modify, and distribute.
 
 <div align="center">
 

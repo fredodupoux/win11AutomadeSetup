@@ -92,16 +92,12 @@ $Config_NewUsername        = ""
 $Config_NewFullName        = ""
 $Config_NewPassword        = ""
 $Config_NewUserIsAdmin     = $false
-$ITAdminAutoLogonPassword  = ""
 if (Test-Path $ConfigFile) {
     # Unblock the file in case Windows flagged it from USB/download
     Unblock-File -Path $ConfigFile -ErrorAction SilentlyContinue
     try {
         . $ConfigFile
         Write-Host "[OK] Loaded config.ps1"
-        # Kept for the permanent IT admin auto-logon at the end (Phase 12.5);
-        # $Config_ITAdminPassword itself is cleared once the account is created.
-        $ITAdminAutoLogonPassword = $Config_ITAdminPassword
     } catch {
         Write-Warning "config.ps1 found but failed to load: $_"
         Write-Warning "Continuing with interactive prompts for all values."
@@ -676,8 +672,13 @@ if ($OobeMode) {
 
             $xmlContent = $xmlContent -replace "<ComputerName>$([regex]::Escape($currentName))</ComputerName>",
                                                "<ComputerName>$newName</ComputerName>"
-            [System.IO.File]::WriteAllText($AutounattendPath, $xmlContent, [System.Text.Encoding]::UTF8)
-            Write-Host "[OK] Computer name on USB incremented: $currentName -> $newName"
+            try {
+                [System.IO.File]::WriteAllText($AutounattendPath, $xmlContent, [System.Text.Encoding]::UTF8)
+                Write-Host "[OK] Computer name on USB incremented: $currentName -> $newName"
+            } catch {
+                # Bootable ISO / CD is read-only - set the next name with Build-USB.ps1 instead
+                Write-Host "Setup media is read-only - name not incremented (next PC: set it in the client's config.ps1)"
+            }
         } else {
             Write-Warning "Computer name '$currentName' has no trailing number - skipping increment"
         }
@@ -781,42 +782,17 @@ if ($RebootRequired -and -not $OobeMode) {
 Write-Host ""
 
 # ================================================================
-# PHASE 12.5: Permanent IT admin auto-logon (Sysinternals Autologon)
+# PHASE 12.5: Turn auto-logon OFF (always, every client, every mode)
 # ================================================================
-# Autologon.exe stores the password encrypted (LSA secret) instead of in
-# plain text in the registry. No logon count: the IT admin signs in
-# automatically after every reboot until this is turned off.
-# To turn it off later:  reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f
+# The answer file signs the IT admin in automatically ONCE so this script
+# can run. Once setup is done, auto-logon must never stay on: the PC
+# always comes back to the sign-in screen.
 
-$Winlogon       = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
-$AutologonExe   = Join-Path $PSScriptRoot 'Autologon.exe'
-$AutoLogonSet   = $false
-
-# Plain-text password / one-time count left by the answer file
+Write-Host "--- Phase 12.5: Auto-logon off ---"
+$Winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+Set-ItemProperty -Path $Winlogon -Name AutoAdminLogon -Value '0'
 Remove-ItemProperty -Path $Winlogon -Name DefaultPassword, AutoLogonCount -ErrorAction SilentlyContinue
-
-if ((Test-Path $AutologonExe) -and $Config_ITAdminUsername -and $ITAdminAutoLogonPassword) {
-    Write-Host "--- Phase 12.5: IT admin auto-logon ---"
-    # Local account: the "domain" is the computer name (the new one if a rename is pending)
-    $LogonDomain = if ($Config_ComputerName) { $Config_ComputerName } else { $env:COMPUTERNAME }
-    $AutologonArgs = '-accepteula "{0}" "{1}" "{2}"' -f $Config_ITAdminUsername, $LogonDomain, ($ITAdminAutoLogonPassword -replace '"', '\"')
-    $AutologonProc = Start-Process -FilePath $AutologonExe -ArgumentList $AutologonArgs -Wait -PassThru
-    $AutologonArgs = $null
-
-    $wl = Get-ItemProperty -Path $Winlogon
-    if ($wl.AutoAdminLogon -eq '1' -and $wl.DefaultUserName -eq $Config_ITAdminUsername) {
-        $AutoLogonSet = $true
-        Write-Host "[OK] '$Config_ITAdminUsername' will sign in automatically after every reboot"
-    } else {
-        Write-Warning "Autologon.exe (exit code $($AutologonProc.ExitCode)) did not enable auto-logon for '$Config_ITAdminUsername'"
-    }
-} elseif ($OobeMode) {
-    Write-Host "Auto-logon: Autologon.exe not found - sign-in screen after reboot"
-}
-if (-not $AutoLogonSet -and $OobeMode) {
-    Set-ItemProperty -Path $Winlogon -Name AutoAdminLogon -Value '0'
-}
-$ITAdminAutoLogonPassword = $null
+Write-Host "[OK] Auto-logon disabled and stored password removed - sign-in screen after reboot"
 Write-Host ""
 
 # ================================================================

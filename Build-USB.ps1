@@ -1,32 +1,40 @@
 <#
 .SYNOPSIS
-    Generates autounattend.xml from config.ps1 and the template.
+    CLEAN INSTALL media: generates autounattend.xml and a ready-to-copy
+    USB folder for one client.
 
 .DESCRIPTION
-    Loads Setup/config.ps1 if it exists, then prompts for any
-    value that is missing or empty. Writes all collected values
-    back to config.ps1 so the file stays up to date.
-    Finally substitutes %%PLACEHOLDERS%% in autounattend.template.xml
-    and writes the finished autounattend.xml to the repo root.
+    Loads clients\<client>\config.ps1 (created from clients\_example if
+    new), prompts for any value that is missing, and writes the values
+    back. Then builds:
+        dist\<client>\usb\autounattend.xml   (from autounattend.template.xml)
+        dist\<client>\usb\Setup\             (generic scripts + this client's files)
+    Copy the CONTENTS of dist\<client>\usb\ to the root of a Windows 11
+    install USB, or run Build-ISO.ps1 to bake it into a bootable ISO.
 
-    Run this every time you prepare a USB drive.
+.EXAMPLE
+    pwsh ./Build-USB.ps1 -Client safitek
 
 .NOTES
     Requires PowerShell 5.1+ (Windows) or pwsh (macOS/Linux).
-    On macOS: brew install powershell  then: pwsh ./Build-USB.ps1
+    On macOS: brew install powershell
 #>
+param(
+    [string]$Client = ''
+)
 
-$ErrorActionPreference = "Stop" 
+$ErrorActionPreference = "Stop"
 $ScriptDir  = $PSScriptRoot
-$ConfigFile = Join-Path $ScriptDir "Setup\config.ps1"
+. (Join-Path $ScriptDir 'Build-Common.ps1')
 
-# Unblock only the files we own - scoped to the script folder and Setup\ subfolder.
-# No -Recurse on $ScriptDir to avoid scanning protected system paths if the script
-# is placed at a drive root (e.g. C:\).
-Get-ChildItem -Path $ScriptDir -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
-$SetupSubdir = Join-Path $ScriptDir "Setup"
-if (Test-Path $SetupSubdir) {
-    Get-ChildItem -Path $SetupSubdir -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
+$ClientDir  = Resolve-Client -Client $Client -AllowNew
+$ClientName = Split-Path $ClientDir -Leaf
+$ConfigFile = Join-Path $ClientDir 'config.ps1'
+$UsbDir     = Join-Path $DistRoot "$ClientName\usb"
+
+# Unblock only the files we own (no -Recurse on $ScriptDir in case it is a drive root)
+foreach ($d in @($ScriptDir, $SetupSource, $ClientDir)) {
+    Get-ChildItem -Path $d -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
@@ -108,19 +116,8 @@ $Config_NewFullName        = ""
 $Config_NewPassword        = ""
 $Config_NewUserIsAdmin     = $false
 
-if (Test-Path $ConfigFile) {
-    . $ConfigFile
-    Write-Host "[OK] Loaded existing config.ps1"
-} else {
-    $ExampleFile = Join-Path $ScriptDir "Setup\config.example.ps1"
-    if (-not (Test-Path $ExampleFile)) {
-        Write-Error "config.example.ps1 not found at: $ExampleFile"
-        exit 1
-    }
-    Copy-Item -Path $ExampleFile -Destination $ConfigFile
-    . $ConfigFile
-    Write-Host "[OK] Created config.ps1 from config.example.ps1"
-}
+. $ConfigFile
+Write-Host "[OK] Loaded $ConfigFile"
 Write-Host ""
 
 # --------------------------------------------------------------
@@ -291,9 +288,10 @@ $Config_ITAdminPassword = $null
 $Config_NewPassword     = $null
 [System.GC]::Collect()
 
-$OutputPath = Join-Path $ScriptDir "autounattend.xml"
+New-SetupFolder -ClientDir $ClientDir -Destination (Join-Path $UsbDir 'Setup')
+$OutputPath = Join-Path $UsbDir "autounattend.xml"
 [System.IO.File]::WriteAllText($OutputPath, $xml, [System.Text.Encoding]::UTF8)
-Write-Host "[OK] autounattend.xml generated"
+Write-Host "[OK] $UsbDir ready (autounattend.xml + Setup\)"
 Write-Host ""
 
 # --------------------------------------------------------------
@@ -313,11 +311,11 @@ Write-Host "  WiFi SSID     : $(if ($Config_WifiSSID) { $Config_WifiSSID } else 
 Write-Host "  Tailscale     : $(if ($Config_TailscaleAuthKey) { '(set)' } else { '(will prompt during setup)' })"
 Write-Host "  Action1 agent : $(if ($Config_Action1AgentUrl) { '(set)' } else { '(skipped)' })"
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  1. Write Windows 11 ISO to USB with Rufus (GPT / UEFI)"
-Write-Host "  2. Copy autounattend.xml --> USB root\"
-Write-Host "  3. Copy Setup\           --> USB root\Setup\"
-Write-Host "  4. Boot target machine from USB"
+Write-Host "Next steps (USB):"
+Write-Host "  1. Write a stock Windows 11 ISO to USB with Rufus (GPT / UEFI)"
+Write-Host "  2. Copy the CONTENTS of $UsbDir to the USB root"
+Write-Host "  3. Boot the target machine from the USB (the disk is wiped)"
+Write-Host "Or bake it into a bootable ISO (Windows + ADK):  .\Build-ISO.ps1 -Client $ClientName"
 Write-Host ""
-Write-Host "WARNING: autounattend.xml contains a plain-text password." -ForegroundColor Yellow
-Write-Host "Delete it from the USB after provisioning is complete." -ForegroundColor Yellow
+Write-Host "WARNING: autounattend.xml and Setup\config.ps1 contain plain-text passwords." -ForegroundColor Yellow
+Write-Host "Delete them from the USB after provisioning is complete." -ForegroundColor Yellow

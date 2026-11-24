@@ -1,9 +1,0 @@
-{
-    "_comment": "Apps not available in winget. 'installers' = direct-download installers run as admin (machine-wide). 'webApps' = Chrome --app shortcuts on the Public Desktop + Start menu for all users. No Microsoft Store apps.",
-    "installers": [
-        { "name": "SoWork", "url": "https://desktop.sowork.com/latest/SoWork%20Setup.exe", "args": "/S" }
-    ],
-    "webApps": [
-        { "name": "WhatsApp", "url": "https://web.whatsapp.com", "icon": "https://web.whatsapp.com/favicon.ico" }
-    ]
-}

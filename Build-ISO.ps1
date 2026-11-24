@@ -1,10 +1,11 @@
 <#
 .SYNOPSIS
-    Creates a bootable Windows 11 ISO with autounattend.xml and Setup/ baked in.
+    CLEAN INSTALL ISO: a bootable Windows 11 ISO with one client's
+    autounattend.xml and Setup\ baked in (wipes the disk on boot).
 
 .DESCRIPTION
-    Takes a stock Windows 11 ISO, mounts it, injects autounattend.xml and the
-    Setup/ folder, then repacks into a new bootable UDF ISO using oscdimg from
+    Takes a stock Windows 11 ISO, mounts it, injects dist\<client>\usb\
+    (autounattend.xml + Setup\ from Build-USB.ps1), then repacks into a new bootable UDF ISO using oscdimg from
     the Windows ADK. Output is suitable for KVM/QEMU, Ventoy, or Rufus/dd to USB.
 
 .NOTES
@@ -12,16 +13,25 @@
       - Must be run as Administrator (mounting ISO requires elevation)
       - Windows ADK with "Deployment Tools" installed
         https://learn.microsoft.com/en-us/windows-hardware/get-started/adk-install
-      - Run Build-USB.ps1 first to generate autounattend.xml and config.ps1
+      - Run Build-USB.ps1 -Client <name> first (creates dist\<client>\usb\)
+
+    Usage:  .\Build-ISO.ps1 -Client safitek
 
     WARNING: The output ISO embeds autounattend.xml which contains a plain-text
     password. Treat it as a credential file - do not share or store insecurely.
 #>
 
 #Requires -RunAsAdministrator
+param(
+    [string]$Client = ''
+)
 
 $ErrorActionPreference = "Stop"
 $ScriptDir = $PSScriptRoot
+. (Join-Path $ScriptDir 'Build-Common.ps1')
+$ClientDir  = Resolve-Client -Client $Client
+$ClientName = Split-Path $ClientDir -Leaf
+$UsbDir     = Join-Path $DistRoot "$ClientName\usb"
 
 Write-Host ""
 Write-Host "============================================"
@@ -49,13 +59,13 @@ Write-Host "[OK] oscdimg: $OscdimgPath"
 # ---------------------------------------------------------------
 # Verify prerequisites
 # ---------------------------------------------------------------
-$AutounattendFile = Join-Path $ScriptDir "autounattend.xml"
+$AutounattendFile = Join-Path $UsbDir "autounattend.xml"
 if (-not (Test-Path $AutounattendFile)) {
-    Write-Error "autounattend.xml not found. Run Build-USB.ps1 first to generate it."
+    Write-Error "$AutounattendFile not found. Run Build-USB.ps1 -Client $ClientName first."
     exit 1
 }
 
-$SetupFolder = Join-Path $ScriptDir "Setup"
+$SetupFolder = Join-Path $UsbDir "Setup"
 if (-not (Test-Path $SetupFolder)) {
     Write-Error "Setup\ folder not found at: $SetupFolder"
     exit 1
@@ -84,7 +94,7 @@ $computerName = if ($xmlContent -match '<ComputerName>([^<]+)</ComputerName>') {
 $defaultName  = "Win11-$computerName.iso"
 $outputName   = Read-Host "Output ISO filename (default: $defaultName)"
 if ([string]::IsNullOrWhiteSpace($outputName)) { $outputName = $defaultName }
-$OutputIso = Join-Path $ScriptDir $outputName
+$OutputIso = Join-Path (Join-Path $DistRoot $ClientName) $outputName
 
 Write-Host ""
 

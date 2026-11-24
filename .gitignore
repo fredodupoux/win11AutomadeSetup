@@ -1,20 +1,19 @@
-Provisionning_Guide.md
-.DS_Store
-.vscode/
-configs/
-# Local config — contains secrets, never commit
-Setup/config.ps1
+# Client folders hold passwords and keys - only the example is committed
+clients/*
+!clients/_example/
 
-# Generated file — contains plain-text password, never commit
+# Build output: autounattend.xml, staged USB folders, ISOs (all contain passwords)
+dist/
+*.iso
 autounattend.xml
+Setup/config*.ps1
 
 # Logs
 *.log
 
-# Windows
+# OS / editor
+.DS_Store
 Thumbs.db
 Desktop.ini
-Setup/config*.ps1
-
-# Provisioning ISOs contain config.ps1 secrets
-*.iso
+.vscode/
+Provisionning_Guide.md

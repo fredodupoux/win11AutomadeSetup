@@ -15,16 +15,17 @@
     %%ITADMIN_PASSWORD%%   IT admin account password (plain text on USB only)
     %%COMPUTER_NAME%%      Machine hostname (falls back to WIN11-SETUP if blank)
 
-  USB STRUCTURE (after running Build-USB.ps1):
+  USB STRUCTURE (copy the contents of dist\<client>\usb\ made by
+  Build-USB.ps1 -Client <client> onto a Windows 11 install USB):
     USB root/
     ├── autounattend.xml        (generated - not this template)
     ├── [Windows 11 ISO files]
     └── Setup/
         ├── Setup.ps1
         ├── Launch-Setup.cmd    (auto-launched after first login)
-        ├── packages.json
-        ├── config.example.ps1
-        └── config.ps1          (your secrets - gitignored)
+        ├── config.ps1          (this client's secrets)
+        ├── packages.json       (this client's winget list)
+        └── installers.json     (optional: non-winget apps)
 
   DELL OPTIPLEX 3070/5070 MFF NOTES:
     - No driver injection needed. Windows 11 inbox drivers cover
