@@ -6,26 +6,29 @@
   DO NOT use this file directly on a USB drive.
   Run Build-USB.ps1 to generate autounattend.xml from config.ps1.
 
-  Placeholders (substituted by Build-USB.ps1):
+  Placeholders (filled from clients\<client>\client.json + secrets.json
+  by the provisioning UI / Build-USB.ps1 - see lib\Provisioning.psm1):
     %%ORGANIZATION%%       Company/org name
-    %%TIMEZONE%%           Windows timezone string
+    %%TIMEZONE%%           Windows timezone ID
     %%WINDOWS_EDITION%%    "Windows 11 Pro" / "Windows 11 Home" / etc.
     %%ITADMIN_USERNAME%%   Local IT admin account username
     %%ITADMIN_DISPLAY%%    IT admin display name (full name)
-    %%ITADMIN_PASSWORD%%   IT admin account password (plain text on USB only)
-    %%COMPUTER_NAME%%      Machine hostname (falls back to WIN11-SETUP if blank)
+    %%ITADMIN_PASSWORD%%   IT admin password (plain text on the USB only)
+    %%COMPUTER_NAME%%      First PC's name (incremented on a writable USB)
+    %%UI_LANGUAGE%% %%INPUT_LOCALE%% %%SYSTEM_LOCALE%% %%USER_LOCALE%%
+                           Language / keyboard / formats (e.g. en-US, fr-FR)
 
-  USB STRUCTURE (copy the contents of dist\<client>\usb\ made by
-  Build-USB.ps1 -Client <client> onto a Windows 11 install USB):
+  USB STRUCTURE (copy the contents of dist\<client>\<batch>\usb\ onto a
+  Windows 11 install USB):
     USB root/
     ├── autounattend.xml        (generated - not this template)
     ├── [Windows 11 ISO files]
     └── Setup/
         ├── Setup.ps1
         ├── Launch-Setup.cmd    (auto-launched after first login)
-        ├── config.ps1          (this client's secrets)
-        ├── packages.json       (this client's winget list)
-        └── installers.json     (optional: non-winget apps)
+        ├── client.json         (this client's settings)
+        ├── secrets.json        (this client's passwords)
+        └── custom.ps1          (optional extra steps)
 
   DELL OPTIPLEX 3070/5070 MFF NOTES:
     - No driver injection needed. Windows 11 inbox drivers cover
@@ -51,13 +54,13 @@
                language="neutral"
                versionScope="nonSxS">
       <SetupUILanguage>
-        <UILanguage>en-US</UILanguage>
+        <UILanguage>%%UI_LANGUAGE%%</UILanguage>
       </SetupUILanguage>
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
+      <InputLocale>%%INPUT_LOCALE%%</InputLocale>
+      <SystemLocale>%%SYSTEM_LOCALE%%</SystemLocale>
+      <UILanguage>%%UI_LANGUAGE%%</UILanguage>
       <UILanguageFallback>en-US</UILanguageFallback>
-      <UserLocale>en-US</UserLocale>
+      <UserLocale>%%USER_LOCALE%%</UserLocale>
     </component>
 
     <component name="Microsoft-Windows-Setup"
@@ -201,6 +204,12 @@
           <Path>reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" /v Win11Provision /t REG_SZ /d "cmd.exe /c for %D in (D E F G H I J K) do if exist \"%D:\Setup\Launch-Setup.cmd\" call \"%D:\Setup\Launch-Setup.cmd\"" /f</Path>
           <WillReboot>Never</WillReboot>
         </RunSynchronousCommand>
+        <!-- Windows 11's passwordless-only sign-in blocks the one-time auto sign-in -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device" /v DevicePasswordLessBuildVersion /t REG_DWORD /d 0 /f</Path>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
       </RunSynchronous>
     </component>
 
@@ -281,11 +290,11 @@
                publicKeyToken="31bf3856ad364e35"
                language="neutral"
                versionScope="nonSxS">
-      <InputLocale>en-US</InputLocale>
-      <SystemLocale>en-US</SystemLocale>
-      <UILanguage>en-US</UILanguage>
+      <InputLocale>%%INPUT_LOCALE%%</InputLocale>
+      <SystemLocale>%%SYSTEM_LOCALE%%</SystemLocale>
+      <UILanguage>%%UI_LANGUAGE%%</UILanguage>
       <UILanguageFallback>en-US</UILanguageFallback>
-      <UserLocale>en-US</UserLocale>
+      <UserLocale>%%USER_LOCALE%%</UserLocale>
     </component>
 
   </settings>

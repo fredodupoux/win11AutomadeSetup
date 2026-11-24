@@ -1,9 +1,0 @@
-{
-    "_comment": "Optional. Apps that are not in winget. 'installers' = direct-download installers run as admin (machine-wide). 'webApps' = Chrome --app shortcuts on the Public Desktop + Start menu for all users. Delete this file if the client needs none.",
-    "installers": [
-        { "name": "ExampleApp", "url": "https://example.com/ExampleSetup.exe", "args": "/S" }
-    ],
-    "webApps": [
-        { "name": "WhatsApp", "url": "https://web.whatsapp.com", "icon": "https://web.whatsapp.com/favicon.ico" }
-    ]
-}

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "organization": "EXAMPLE",
+  "windowsEdition": "Windows 11 Pro",
+  "timezone": "Eastern Standard Time",
+  "locale": {
+    "ui": "en-US",
+    "input": "en-US",
+    "system": "en-US",
+    "user": "en-US"
+  },
+  "computerNamePattern": "EXAMPLE-PC-##",
+  "itAdmin": {
+    "username": "itadmin",
+    "displayName": "IT Admin"
+  },
+  "endUser": {
+    "create": true,
+    "username": "user",
+    "fullName": "Example User",
+    "isAdmin": false,
+    "mustChangePassword": true
+  },
+  "wifi": {
+    "ssid": "",
+    "security": "WPA2PSK",
+    "hidden": false
+  },
+  "apps": {
+    "winget": [
+      "Google.Chrome",
+      "AnyDesk.AnyDesk",
+      "7zip.7zip",
+      "Notepad++.Notepad++"
+    ],
+    "installers": [],
+    "webApps": [
+      {
+        "name": "WhatsApp",
+        "url": "https://web.whatsapp.com",
+        "icon": "https://web.whatsapp.com/favicon.ico"
+      }
+    ]
+  },
+  "features": {
+    "action1": false,
+    "tailscale": false,
+    "automaticUpdates": true,
+    "firewall": true,
+    "screenLockOnWake": true,
+    "remoteDesktop": true,
+    "disableSmb1": true,
+    "dellCommandUpdate": true,
+    "windowsUpdate": true,
+    "customScript": false
+  },
+  "notes": "Template for new clients. Copied by 'New client' in the UI."
+}
