@@ -251,6 +251,16 @@ $Config_Action1AgentUrl    = 'https://app.action1.com/agent/x/Windows/agent.msi'
             if ($state.state -notin 'Running', 'NotStarted') { break }
         }
         Assert ($state.state -eq 'Completed' -and -not $state.error -and @($state.result.outputs).Count -ge 1) "build job completes ($($state.state) $($state.error))"
+        if (Get-IsoTool) {
+            # The provisioning ISO through the UI job queue (hdiutil writes to stderr on macOS)
+            $pb = Invoke-RestMethod "$base/api/build" -Method Post -Headers $h -ContentType 'application/json' -Body (@{ client = 'acme'; batch = $batch.id; media = 'provision' } | ConvertTo-Json)
+            for ($i = 0; $i -lt 120; $i++) {
+                Start-Sleep -Milliseconds 500
+                $ps = Invoke-RestMethod "$base/api/jobs/$($pb.jobId)"
+                if ($ps.state -notin 'Running', 'NotStarted') { break }
+            }
+            Assert ($ps.state -eq 'Completed' -and -not $ps.error -and "$($ps.result.outputs)" -like '*.iso') "provisioning ISO job reports success ($($ps.state) '$($ps.error)')"
+        }
         $bc = Invoke-RestMethod "$base/api/build" -Method Post -Headers $h -ContentType 'application/json' -Body (@{ client = 'acme2'; media = 'usb' } | ConvertTo-Json) -SkipHttpErrorCheck
         Assert ([bool]$bc.error) 'build of an incomplete client is refused with a message'
     }

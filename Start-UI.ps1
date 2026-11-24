@@ -130,8 +130,17 @@ function Get-BuildJob([string]$Id) {
         $out = @(Receive-Job -Job $j -Keep -ErrorAction SilentlyContinue)
         $result = $out | Where-Object { $_ -is [System.Collections.IDictionary] -or $_.PSObject.Properties['outputs'] } | Select-Object -Last 1
     }
-    if ($child.Error.Count -gt 0) { $errorText = ($child.Error | ForEach-Object { $_.Exception.Message }) -join "`n" }
-    if ($state -eq 'Failed' -and -not $errorText) { $errorText = [string]$child.JobStateInfo.Reason.Message }
+    # A job only failed if it stopped with an error or returned no result. Non-fatal
+    # error records (e.g. a tool writing to stderr) are shown in the log, not as a failure.
+    $notes = @($child.Error | ForEach-Object { $_.Exception.Message } | Where-Object { $_ -and $_ -notmatch '^NotSpecified: \(:String\) \[\], RemoteException$' })
+    if ($state -eq 'Failed') {
+        $errorText = [string]$child.JobStateInfo.Reason.Message
+        if (-not $errorText) { $errorText = $notes -join "`n" }
+    } elseif ($state -eq 'Completed' -and -not $result) {
+        $errorText = if ($notes) { $notes -join "`n" } else { 'The build ended without a result' }
+    } elseif ($notes) {
+        $log += @($notes | ForEach-Object { "note: $_" })
+    }
     return [ordered]@{ id = $Id; state = $state; started = $Jobs[$Id].started; params = $Jobs[$Id].params; log = $log; error = $errorText; result = $result }
 }
 

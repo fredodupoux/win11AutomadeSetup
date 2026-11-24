@@ -676,6 +676,15 @@ function New-ImapiBootOption([string]$File, [int]$PlatformId) {
     return $boot
 }
 
+# Runs an external tool. stderr is captured with stdout (some tools, e.g. hdiutil,
+# write harmless lines there, which background jobs would report as errors).
+function Invoke-NativeTool([string]$Exe, [string[]]$Arguments) {
+    $out = & $Exe @Arguments 2>&1 | ForEach-Object { "$_" } | Where-Object { $_.Trim() }
+    $code = $LASTEXITCODE
+    foreach ($line in $out) { Write-Host "  $line" }
+    if ($code -ne 0) { throw "$(Split-Path $Exe -Leaf) failed (exit code $code): $(@($out) -join ' | ')" }
+}
+
 function New-IsoImage {
     <#
     .SYNOPSIS  Creates an ISO from a folder.
@@ -700,15 +709,13 @@ function New-IsoImage {
     if ($bootable -and (Find-Oscdimg)) {
         $osc = Find-Oscdimg
         $bootData = "2#p0,e,b$BiosBoot#pEF,e,b$UefiBoot"
-        & $osc -m -o -u2 -udfver102 "-l$VolumeName" "-bootdata:$bootData" $SourceDir $OutFile | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "oscdimg failed ($LASTEXITCODE)" }
+        Invoke-NativeTool $osc @('-m', '-o', '-u2', '-udfver102', "-l$VolumeName", "-bootdata:$bootData", $SourceDir, $OutFile)
         return $OutFile
     }
 
     switch ($tool) {
         'hdiutil' {
-            & hdiutil makehybrid -iso -joliet -default-volume-name $VolumeName -o $OutFile $SourceDir | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "hdiutil failed ($LASTEXITCODE)" }
+            Invoke-NativeTool 'hdiutil' @('makehybrid', '-iso', '-joliet', '-default-volume-name', $VolumeName, '-o', $OutFile, $SourceDir)
         }
         'imapi2' {
             Initialize-ImapiWriter
@@ -730,12 +737,10 @@ function New-IsoImage {
             [ProvIsoWriter]::Write($OutFile, $result.ImageStream)
         }
         { $_ -in 'xorriso' } {
-            & xorriso -as mkisofs -J -R -V $VolumeName -o $OutFile $SourceDir | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "xorriso failed ($LASTEXITCODE)" }
+            Invoke-NativeTool 'xorriso' @('-as', 'mkisofs', '-J', '-R', '-V', $VolumeName, '-o', $OutFile, $SourceDir)
         }
         { $_ -in 'genisoimage', 'mkisofs' } {
-            & $tool -J -R -V $VolumeName -o $OutFile $SourceDir | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "$tool failed ($LASTEXITCODE)" }
+            Invoke-NativeTool $tool @('-J', '-R', '-V', $VolumeName, '-o', $OutFile, $SourceDir)
         }
         default { throw 'No ISO tool found (macOS: hdiutil, Windows: built in, Linux: install xorriso).' }
     }

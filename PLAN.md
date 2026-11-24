@@ -113,6 +113,7 @@ needs go in an optional per-client script.
 | 🧪 | F17 | Progress reports over the network | UI with `-Lan`, build with "PCs report their progress", watch the batch tiles; Windows may ask to allow PowerShell through the firewall |
 | ✅ | F19 | UI slow / "← Clients" did nothing / "Operation timed out" in the terminal (Safari worst) | Server waited on idle browser pre-connections one at a time; now serves whichever connection has data and drops idle ones. Regression test added |
 | ✅ | F20 | Batch form vanished while typing | The batch list's 8 s auto-refresh kept running when the form opened; now stopped while a form is open. Regression test added |
+| ✅ | F22 | Provisioning ISO build showed "failed" (`NotSpecified ... RemoteException`) although the ISO was fine | `hdiutil` writes an empty line to stderr, which a background job reports as an error. Tool output is now captured, and a build only fails if the job fails or returns nothing. Test added |
 | 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
 | 👤 | F18 | Media built before `2cdbc6f` | Old ISOs/USBs carry their own old scripts + `config.ps1` and keep working the old way, without batches/reports/status. Rebuild from the UI to get the new behaviour (e.g. `dist/safitek/SAFITEK-Provision.iso` is the old one) |
 
