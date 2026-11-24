@@ -226,6 +226,48 @@ Replace `D:` with the actual drive letter where the Setup folder is located.
 
 ---
 
+## Step-by-Step: Option C — PC stuck at OOBE, no reinstall (fully unattended)
+
+Use this when Windows 11 is already installed and the PC is sitting at the
+"Let's set things up" / "Who's going to use this device?" screen.
+
+**Media prep:** `pwsh ./Build-ProvisionISO.ps1` builds `<ORG>-Provision.iso` with
+`Setup.ps1`, `Provision-OOBE.*`, the package file, `installers.json`,
+`Autologon.exe` (Sysinternals) and **this client's** `config.ps1`.
+Set `$Config_ComputerName` to the first name, e.g. `SAFITEKHT-CS-01`.
+Mount the ISO on the IP KVM as **CD-ROM** (not flash drive). A USB stick with the
+same `Setup\` folder also works and auto-increments the name.
+
+**Per PC (~1 min hands-on):**
+1. Mount the ISO, power on, wait for the OOBE screen, press **Shift + F10**
+2. Type `D:\RUN 3` (3 = PC number → `SAFITEKHT-CS-03`); from a USB stick: `D:\Setup\Provision-OOBE.cmd`
+3. The PC reboots → unmount → go to the next PC
+
+**What happens next, on its own:**
+```
+Provision-OOBE.ps1  (from the OOBE command prompt)
+    ├─ assigns next computer name, logs it in Setup\provisioned-machines.csv
+    │  (keyed by MAC - re-running on the same PC reuses its name) and bumps config.ps1
+    ├─ copies this client's files to C:\Setup (Administrators-only)
+    └─ sysprep /oobe /unattend  (no /generalize - Windows, drivers, activation kept)
+Reboot → OOBE skipped → IT admin account created → auto-logon once
+    └─ Setup.ps1 -Unattended
+         WiFi → wait for internet → winget apps → installers.json
+         (SoWork machine-wide, WhatsApp Web as a Chrome app shortcut for all
+         users - no Microsoft Store apps) → end user (must change password at
+         first login) → hardening → Action1 → Windows Update (retries, never
+         blocks the rest) → permanent IT admin auto-logon via Autologon.exe
+         → cleanup (C:\Setup + answer files with passwords removed) → reboot
+```
+
+If sysprep refuses to run, the script prints the sysprep error log and the manual fallback.
+Log: `C:\Users\<itadmin>\win_setup_*.log`.
+
+Auto-logon stays on after provisioning (password stored encrypted by Autologon).
+To turn it off on a PC: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f`
+
+---
+
 ## What Setup.ps1 Does
 
 | Phase | Action |
@@ -291,7 +333,7 @@ Edit `packages.json` freely — add or remove entries using `winget search <appn
 - Password required on wake / screen lock
 - Remote Desktop enabled (with firewall rule)
 - SMBv1 disabled
-- IT admin account hidden from login screen
+- IT admin account kept enabled and visible on the sign-in screen
 - Log file permissions restricted to owner only (equivalent to chmod 600)
 
 ---

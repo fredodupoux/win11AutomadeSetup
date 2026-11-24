@@ -47,8 +47,8 @@ $Config_Timezone = "Eastern Standard Time"
 # --------------------------------------------------------------
 # IT ADMIN ACCOUNT  [autounattend.xml + Setup.ps1]
 # --------------------------------------------------------------
-# This account is created during OOBE and hidden from the login
-# screen after Setup.ps1 runs.
+# This account is created during OOBE and stays visible on the
+# sign-in screen (Setup.ps1 makes sure it is never hidden).
 $Config_ITAdminUsername    = "itadmin"
 $Config_ITAdminDisplayName = "IT Admin"
 

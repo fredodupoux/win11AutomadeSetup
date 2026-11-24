@@ -10,14 +10,10 @@
                 "Type": "Microsoft.PreIndexed.Package"
             },
             "Packages": [
-                {"PackageIdentifier": "Tailscale.Tailscale"},
-
                 {"PackageIdentifier": "Google.Chrome"},
-                {"PackageIdentifier": "Mozilla.Firefox"},
 
-                {"PackageIdentifier": "SlackTechnologies.Slack"},
+                {"PackageIdentifier": "Netsoft.Hubstaff"},
                 {"PackageIdentifier": "AnyDesk.AnyDesk"},
-                {"PackageIdentifier": "Zoom.Zoom"},
 
                 {"PackageIdentifier": "7zip.7zip"},
                 {"PackageIdentifier": "Notepad++.Notepad++"}

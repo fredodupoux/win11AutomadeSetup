@@ -15,3 +15,6 @@ autounattend.xml
 Thumbs.db
 Desktop.ini
 Setup/config*.ps1
+
+# Provisioning ISOs contain config.ps1 secrets
+*.iso
