@@ -79,6 +79,7 @@ needs go in an optional per-client script.
 | ✅ | 3.4 | winget catalog search / ID check | Official index, cached 7 days; also warns at build time |
 | ✅ | 3.5 | Build screen | Background jobs, log, output, next steps, "Show" in Finder/Explorer |
 | ✅ | 3.6 | Batches screen | Per-PC tiles, manual status, auto-refresh |
+| ✅ | 3.7 | Turn PC reports on/off from the UI | Build screen checkbox or System page; no restart; remembered in `cache/ui-settings.json` |
 
 ### Phase 4: Later
 | | ID | Task | Notes |
@@ -110,6 +111,9 @@ needs go in an optional per-client script.
 | 🧪 | F15 | New `Setup.ps1` on a real PC | Rewritten (JSON, isolated steps, status file); run one PC end to end and read `C:\ProgramData\Provisioning\status.json` |
 | 🧪 | F16 | UI + builds on a Windows tech machine | Start-UI, winget search (uses `winsqlite3.dll`), provisioning ISO via IMAPI2 |
 | 🧪 | F17 | Progress reports over the network | UI with `-Lan`, build with "PCs report their progress", watch the batch tiles; Windows may ask to allow PowerShell through the firewall |
+| ✅ | F19 | UI slow / "← Clients" did nothing / "Operation timed out" in the terminal (Safari worst) | Server waited on idle browser pre-connections one at a time; now serves whichever connection has data and drops idle ones. Regression test added |
+| ✅ | F20 | Batch form vanished while typing | The batch list's 8 s auto-refresh kept running when the form opened; now stopped while a form is open. Regression test added |
+| 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
 | 👤 | F18 | Media built before `2cdbc6f` | Old ISOs/USBs carry their own old scripts + `config.ps1` and keep working the old way, without batches/reports/status. Rebuild from the UI to get the new behaviour (e.g. `dist/safitek/SAFITEK-Provision.iso` is the old one) |
 
 ---

@@ -558,6 +558,7 @@ async function refreshBatches() {
 }
 
 function renderBatches(editId = null) {
+  clearTimers();   // the list auto-refreshes; never while a form is open
   const ed = state.editor;
   const editing = editId === 'new' ? { name: '', computerNamePattern: ed.client.computerNamePattern, start: 1, end: 10, overrides: {}, notes: '' }
     : editId ? clone(ed.batches.find((b) => b.id === editId)) : null;
@@ -617,7 +618,9 @@ function renderBatches(editId = null) {
 
   if (!editing) {
     state.timers.push(setInterval(async () => {
-      if (document.activeElement && document.activeElement.tagName === 'SELECT') return;
+      const a = document.activeElement;
+      if (a && ['SELECT', 'INPUT', 'TEXTAREA'].includes(a.tagName)) return;
+      if (!location.hash.endsWith('/batches') || $('#batch-form')) return;
       try { await refreshBatches(); renderBatches(); } catch { /* keep last view */ }
     }, 8000));
   }
@@ -719,9 +722,9 @@ async function renderBuild() {
         <label class="field">Stock Windows 11 ISO (full path on this computer)<input type="text" id="b-stock" value="${esc(b.stockIso)}" placeholder="C:\\ISO\\Win11_24H2_English_x64.iso"></label>
       </div>
       <h3>Progress reports</h3>
-      <label class="toggle"><input type="checkbox" id="b-report" ${b.report && system.lan && b.batch ? 'checked' : ''} ${system.lan && b.batch ? '' : 'disabled'}>
+      <label class="toggle"><input type="checkbox" id="b-report" ${b.report && system.lan && b.batch ? 'checked' : ''} ${b.batch ? '' : 'disabled'}>
         <span><b>PCs report their progress to this computer</b>
-        <small>${!system.lan ? 'Restart the UI with <code>-Lan</code> (Start-UI.ps1 -Lan) to enable.' : !b.batch ? 'Choose a batch first.' : 'The PCs must be able to reach this computer on the network during setup.'}</small></span></label>
+        <small>${!b.batch ? 'Choose a batch first.' : !system.lan ? 'Ticking this lets PCs on the local network reach this computer (only for progress reports).' : 'The PCs must be able to reach this computer on the network during setup.'}</small></span></label>
       ${system.lan && system.lanAddresses.length > 1 ? `<label class="field" style="max-width:260px">This computer's address<select id="b-ip">${system.lanAddresses.map((ip) => `<option ${ip === b.reportIp ? 'selected' : ''}>${esc(ip)}</option>`).join('')}</select></label>` : ''}
       <div class="row" style="margin-top:18px"><span class="spacer"></span><button class="primary" id="b-go" ${usable.length ? '' : 'disabled'}>Build</button></div>
     </section>
@@ -731,7 +734,13 @@ async function renderBuild() {
   $('#b-batch').onchange = (e) => { b.batch = e.target.value; renderBuild(); };
   $$('input[name=media]').forEach((r) => r.onchange = () => { b.media = r.value; renderBuild(); });
   if ($('#b-stock')) $('#b-stock').oninput = (e) => { b.stockIso = e.target.value; };
-  if ($('#b-report')) $('#b-report').onchange = (e) => { b.report = e.target.checked; };
+  if ($('#b-report')) $('#b-report').onchange = async (e) => {
+    b.report = e.target.checked;
+    if (b.report && !state.system.lan) {
+      if (!(await setLan(true))) { b.report = false; e.target.checked = false; return; }
+      renderBuild();
+    }
+  };
   if ($('#b-ip')) $('#b-ip').onchange = (e) => { b.reportIp = e.target.value; };
   $('#b-go').onclick = startBuild;
   if (b.jobId) pollJob();
@@ -799,14 +808,42 @@ async function renderSystem() {
       <tr><th>PowerShell</th><td>${esc(s.pwsh)}</td></tr>
       <tr><th>Provisioning ISO</th><td>${s.isoTool ? `<span class="badge ok">${esc(s.isoTool)}</span>` : '<span class="badge bad">no ISO tool</span>'}</td></tr>
       <tr><th>Clean-install ISO</th><td>${s.cleanIsoPossible ? `<span class="badge ok">available</span> ${s.oscdimg ? 'using oscdimg (ADK)' : 'using built-in IMAPI2 (no ADK)'}${s.isAdmin ? '' : ' - start the UI as Administrator to build it'}` : '<span class="badge">Windows only</span> - use the clean-install USB folder on this computer'}</td></tr>
-      <tr><th>Progress reports</th><td>${s.lan ? `<span class="badge ok">listening</span> PCs report to ${s.lanAddresses.map((ip) => `<code>http://${esc(ip)}:${s.port}/api/report</code>`).join(' or ')}` : '<span class="badge">off</span> - restart with <code>pwsh ./Start-UI.ps1 -Lan</code>'}</td></tr>
+      <tr><th>Progress reports</th><td>${s.lan ? `<span class="badge ok">on</span> PCs report to ${s.lanAddresses.map((ip) => `<code>http://${esc(ip)}:${s.port}/api/report</code>`).join(' or ')}` : '<span class="badge">off</span> only this computer can reach the UI'}
+        <button class="small" id="toggle-lan">${s.lan ? 'Turn off' : 'Turn on'}</button></td></tr>
       <tr><th>winget catalog</th><td>${cat.available ? `${cat.count.toLocaleString()} packages, updated ${esc(when(cat.updated))}` : 'not downloaded yet'} <button class="small" id="refresh-cat">Update now</button></td></tr>
       <tr><th>Project folder</th><td><code>${esc(s.repo)}</code></td></tr>
     </table></section>`;
+  $('#toggle-lan').onclick = async () => { if (await setLan(!s.lan)) renderSystem(); };
   $('#refresh-cat').onclick = async (e) => {
     e.target.disabled = true; e.target.textContent = 'Downloading…';
     try { await api('POST', '/api/winget/refresh'); toast('winget catalog updated'); renderSystem(); } catch (err) { toast(err.message, true); e.target.disabled = false; }
   };
+}
+
+// =====================================================================
+// Progress reports (network mode)
+// =====================================================================
+
+function updateLanBadge() {
+  const lan = $('#lan-badge');
+  lan.hidden = false;
+  lan.textContent = state.system.lan ? 'Receiving PC reports' : 'Local only';
+  lan.className = `badge ${state.system.lan ? 'ok' : 'muted'}`;
+}
+
+async function setLan(enabled) {
+  if (enabled && !confirm('Let PCs on the local network send progress reports to this computer?\n\nOnly the report address is reachable from the network; settings and passwords stay on this computer. Your Mac or Windows may ask to allow PowerShell through the firewall - allow it.')) return false;
+  try {
+    await api('POST', '/api/lan', { enabled });
+    // the server re-opens its listener right after answering
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      try { state.system = await api('GET', '/api/system'); if (state.system.lan === enabled) break; } catch { /* restarting */ }
+    }
+    updateLanBadge();
+    toast(enabled ? 'Receiving progress reports from PCs' : 'Progress reports turned off');
+    return state.system.lan === enabled;
+  } catch (err) { toast(err.message, true); return false; }
 }
 
 // =====================================================================
@@ -816,10 +853,7 @@ async function renderSystem() {
 (async function init() {
   try {
     [state.meta, state.system] = await Promise.all([api('GET', '/api/meta'), api('GET', '/api/system')]);
-    const lan = $('#lan-badge');
-    lan.hidden = false;
-    lan.textContent = state.system.lan ? 'Receiving PC reports' : 'Local only';
-    lan.className = `badge ${state.system.lan ? 'ok' : 'muted'}`;
+    updateLanBadge();
   } catch (err) {
     $('#app').innerHTML = `<div class="panel">Cannot reach the provisioning server: ${esc(err.message)}</div>`;
     return;

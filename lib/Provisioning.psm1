@@ -885,6 +885,7 @@ function Invoke-ProvBuild {
 $script:WingetCatalog = $null
 
 function Get-WingetCatalogPath { Join-Path $script:CacheRoot 'winget-catalog.json' }
+function Get-WingetCatalogMetaPath { Join-Path $script:CacheRoot 'winget-catalog.meta.json' }
 
 function Initialize-WinSqlite {
     if ('ProvSqlite' -as [type]) { return }
@@ -962,7 +963,9 @@ function Update-WingetCatalog {
             throw 'sqlite3 not found (macOS has it built in; on Linux install sqlite3).'
         }
         if ($rows.Count -lt 1000) { throw "winget catalog looks incomplete ($($rows.Count) packages)" }
-        Write-JsonFile $out ([ordered]@{ updated = (Get-Date).ToString('s'); count = $rows.Count; packages = @($rows) })
+        $stamp = (Get-Date).ToString('s')
+        Write-JsonFile $out ([ordered]@{ updated = $stamp; count = $rows.Count; packages = @($rows) })
+        Write-JsonFile (Get-WingetCatalogMetaPath) ([ordered]@{ updated = $stamp; count = $rows.Count })
         $script:WingetCatalog = $null
     } finally {
         Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -982,9 +985,13 @@ function Get-WingetCatalog {
 }
 
 function Get-WingetCatalogInfo {
+    # Cheap: read the small meta file instead of loading 16,000 packages
     $path = Get-WingetCatalogPath
     if (-not (Test-Path $path)) { return [ordered]@{ available = $false; updated = $null; count = 0 } }
+    $meta = Read-JsonFile (Get-WingetCatalogMetaPath)
+    if ($meta) { return [ordered]@{ available = $true; updated = $meta.updated; count = $meta.count } }
     $cat = Get-WingetCatalog
+    Write-JsonFile (Get-WingetCatalogMetaPath) ([ordered]@{ updated = $cat.updated; count = $cat.count })
     return [ordered]@{ available = $true; updated = $cat.updated; count = $cat.count }
 }
 

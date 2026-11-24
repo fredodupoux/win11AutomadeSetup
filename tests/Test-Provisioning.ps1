@@ -202,6 +202,20 @@ $Config_Action1AgentUrl    = 'https://app.action1.com/agent/x/Windows/agent.msi'
     Assert $up 'server starts'
     if ($up) {
         $h = @{ 'X-Prov' = '1' }
+        # Browsers open connections that send nothing; they must not block real requests
+        $idle = 1..4 | ForEach-Object { $t = [System.Net.Sockets.TcpClient]::new(); $t.Connect('127.0.0.1', $port); $t }
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        Invoke-RestMethod "$base/api/system" -TimeoutSec 10 | Out-Null
+        Invoke-RestMethod "$base/api/clients" -TimeoutSec 10 | Out-Null
+        $sw.Stop()
+        Assert ($sw.Elapsed.TotalSeconds -lt 3) "idle browser connections don't block requests ($([int]$sw.Elapsed.TotalMilliseconds) ms)"
+        $idle | ForEach-Object { $_.Close() }
+        $half = [System.Net.Sockets.TcpClient]::new(); $half.Connect('127.0.0.1', $port)
+        $hs = $half.GetStream(); $partial = [System.Text.Encoding]::ASCII.GetBytes("GET /api/system HTTP/1.1`r`nHost: localhost`r`n")
+        $hs.Write($partial, 0, $partial.Length)
+        $sw.Restart(); Invoke-RestMethod "$base/api/meta" -TimeoutSec 10 | Out-Null; $sw.Stop()
+        Assert ($sw.Elapsed.TotalSeconds -lt 3) 'a half-sent request does not block others'
+        $half.Close()
         $page = Invoke-WebRequest "$base/" -UseBasicParsing
         Assert ($page.Content -match 'app.js') 'serves the UI'
         $list = Invoke-RestMethod "$base/api/clients"
@@ -223,6 +237,12 @@ $Config_Action1AgentUrl    = 'https://app.action1.com/agent/x/Windows/agent.msi'
         $bad = @{ token = 'nope'; state = 'done'; computerName = 'ACME-PC-04' } | ConvertTo-Json
         try { Invoke-RestMethod "$base/api/report" -Method Post -Body $bad -ContentType 'application/json' | Out-Null; Assert $false 'bad report token blocked' }
         catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 403) 'bad report token blocked (403)' }
+        $off = Invoke-RestMethod "$base/api/lan" -Method Post -Headers $h -ContentType 'application/json' -Body '{"enabled":false}'
+        Start-Sleep -Milliseconds 500
+        Assert (-not (Invoke-RestMethod "$base/api/system").lan) 'reports can be turned off from the UI'
+        $on = Invoke-RestMethod "$base/api/lan" -Method Post -Headers $h -ContentType 'application/json' -Body '{"enabled":true}'
+        Start-Sleep -Milliseconds 500
+        Assert ((Invoke-RestMethod "$base/api/system").lan) 'reports can be turned back on without a restart'
         $build = Invoke-RestMethod "$base/api/build" -Method Post -Headers $h -ContentType 'application/json' -Body (@{ client = 'acme'; batch = $batch.id; media = 'usb' } | ConvertTo-Json)
         $state = $null
         for ($i = 0; $i -lt 120; $i++) {

@@ -75,12 +75,20 @@ try {
   await click('#new-batch');
   ok(await waitFor(`!!document.querySelector('#batch-form')`), 'batch form');
   await type('[data-b="name"]', 'First 4');
+  await sleep(9500);   // longer than the 8 s auto-refresh of the batch list
+  ok(await js(`!!document.querySelector('#batch-form') && document.querySelector('[data-b="name"]').value === 'First 4'`), 'batch form survives the auto-refresh');
   await type('[data-b="start"]', '1');
   await type('[data-b="end"]', '4');
   await click('#batch-save');
   ok(await waitFor(`document.querySelectorAll('.machine').length === 4`), 'batch saved with 4 PCs');
   await js(`(() => { const s = document.querySelector('[data-machine]'); s.value = 'used'; s.dispatchEvent(new Event('change')); })()`);
   ok(await waitFor(`!!document.querySelector('.machine.used')`), 'manual status saved');
+
+  // "← Clients" goes back to the list
+  await click('.page-head a[href="#/clients"]');
+  ok(await waitFor(`location.hash === '#/clients' && document.querySelectorAll('tr[data-go]').length >= 1`), '"← Clients" returns to the list');
+  await send('Page.navigate', { url: `${base}/#/client/beta/batches` });
+  await waitFor(`!!document.querySelector('[data-build-batch]')`);
 
   // Build from batch
   await click('[data-build-batch]');

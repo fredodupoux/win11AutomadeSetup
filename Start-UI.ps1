@@ -8,14 +8,16 @@
         http://localhost:8765
     Manage clients, batches of PCs and build the media without editing code.
 
-    -Lan also listens on the local network so PCs being set up can report
-    their progress back (Batches screen). Only /api/report is reachable from
-    the network, and only with the batch's secret token; everything else
-    (settings, passwords) stays reachable from this machine only.
+    PC progress reports: turn them on from the System page or the Build screen
+    (or start with -Lan). The server then also listens on the local network so
+    PCs being set up can report back (Batches screen). Only /api/report is
+    reachable from the network, and only with the batch's secret token;
+    everything else (settings, passwords) stays reachable from this machine
+    only. The choice is remembered in cache/ui-settings.json.
 
 .EXAMPLE
     pwsh ./Start-UI.ps1
-    pwsh ./Start-UI.ps1 -Lan          # receive progress reports from PCs on the same network
+    pwsh ./Start-UI.ps1 -Lan          # start with PC progress reports already on
 #>
 param(
     [int]$Port = 8765,
@@ -47,20 +49,16 @@ class HttpError : System.Exception {
     HttpError([int]$status, [string]$message) : base($message) { $this.Status = $status }
 }
 
-function Read-Request([System.Net.Sockets.NetworkStream]$Stream) {
+# Parses a buffered request. Returns $null while it is still incomplete.
+function ConvertFrom-RequestBytes([byte[]]$All) {
     $latin1 = [System.Text.Encoding]::Latin1
-    $buf = [byte[]]::new(65536)
-    $ms = [System.IO.MemoryStream]::new()
-    $headerEnd = -1
-    while ($headerEnd -lt 0) {
-        $n = $Stream.Read($buf, 0, $buf.Length)
-        if ($n -le 0) { return $null }
-        $ms.Write($buf, 0, $n)
-        $headerEnd = $latin1.GetString($ms.GetBuffer(), 0, [int]$ms.Length).IndexOf("`r`n`r`n")
-        if ($headerEnd -lt 0 -and $ms.Length -gt 65536) { throw [HttpError]::new(413, 'Headers too large') }
+    $text = $latin1.GetString($All)
+    $headerEnd = $text.IndexOf("`r`n`r`n")
+    if ($headerEnd -lt 0) {
+        if ($All.Length -gt 65536) { throw [HttpError]::new(413, 'Headers too large') }
+        return $null
     }
-    $all = $ms.ToArray()
-    $lines = $latin1.GetString($all, 0, $headerEnd).Split("`r`n")
+    $lines = $text.Substring(0, $headerEnd).Split("`r`n")
     $first = $lines[0].Split(' ')
     if ($first.Count -lt 2) { throw [HttpError]::new(400, 'Bad request line') }
     $headers = @{}
@@ -72,13 +70,8 @@ function Read-Request([System.Net.Sockets.NetworkStream]$Stream) {
     if ($headers.ContainsKey('content-length')) { $len = [int]$headers['content-length'] }
     if ($len -gt $MaxBody) { throw [HttpError]::new(413, 'Body too large') }
     $bodyStart = $headerEnd + 4
-    while (($ms.Length - $bodyStart) -lt $len) {
-        $n = $Stream.Read($buf, 0, $buf.Length)
-        if ($n -le 0) { break }
-        $ms.Write($buf, 0, $n)
-    }
-    $all = $ms.ToArray()
-    $body = if ($len -gt 0) { [System.Text.Encoding]::UTF8.GetString($all, $bodyStart, [Math]::Min($len, $all.Length - $bodyStart)) } else { '' }
+    if (($All.Length - $bodyStart) -lt $len) { return $null }
+    $body = if ($len -gt 0) { [System.Text.Encoding]::UTF8.GetString($All, $bodyStart, $len) } else { '' }
 
     $target = $first[1]
     $path = $target; $query = @{}
@@ -147,7 +140,7 @@ function Get-BuildJob([string]$Id) {
 # ====================================================================
 
 function Get-ReportUrl([string]$Ip) {
-    if (-not $Lan) { throw [HttpError]::new(400, 'Progress reports need the UI started with -Lan (Start-UI.ps1 -Lan) so PCs can reach it.') }
+    if (-not $script:LanMode) { throw [HttpError]::new(400, 'Turn on "receive progress reports" first (System page or the Build screen).') }
     $addrs = @(Get-LanAddresses)
     if (-not $Ip) { $Ip = $addrs | Select-Object -First 1 }
     if (-not $Ip) { throw [HttpError]::new(400, 'No network address found on this machine') }
@@ -169,11 +162,18 @@ function Invoke-Api($Req) {
 
     if ($p -eq '/api/system' -and $m -eq 'GET') {
         $info = Get-ProvSystemInfo
-        $info.lan = [bool]$Lan
+        $info.lan = [bool]$script:LanMode
         $info.port = $Port
         return $info
     }
     if ($p -eq '/api/meta' -and $m -eq 'GET') { return (Get-ProvMeta) }
+
+    # Switch progress reports on/off: the listener is re-opened right after this response
+    if ($p -eq '/api/lan' -and $m -eq 'POST') {
+        $b = Get-JsonBody $Req
+        $script:PendingLan = [bool]$b.enabled
+        return @{ lan = $script:PendingLan; addresses = @(Get-LanAddresses); port = $Port }
+    }
 
     if ($p -eq '/api/clients') {
         if ($m -eq 'GET') { return @{ clients = @(Get-ClientList) } }
@@ -279,18 +279,38 @@ function Invoke-Request($Req, [bool]$FromLoopback) {
 # ====================================================================
 # Main loop
 # ====================================================================
+# One thread, many connections: browsers open extra connections that send
+# nothing (pre-connect / keep-alive). Only connections that have data are
+# served; idle ones are closed quietly after a while. Never blocks on a read.
 
-$address = if ($Lan) { [System.Net.IPAddress]::Any } else { [System.Net.IPAddress]::Loopback }
-$listener = [System.Net.Sockets.TcpListener]::new($address, $Port)
-try { $listener.Start() } catch { Write-Host "Port $Port is busy. Try: pwsh ./Start-UI.ps1 -Port 8766" -ForegroundColor Red; exit 1 }
+$SettingsFile = Join-Path $Paths.Cache 'ui-settings.json'
+$saved = Read-JsonFile $SettingsFile
+$script:LanMode = [bool]$Lan -or [bool]($saved -and $saved['lan'])
+$script:PendingLan = $null
+
+function Start-Listener([bool]$OnNetwork) {
+    $addr = if ($OnNetwork) { [System.Net.IPAddress]::Any } else { [System.Net.IPAddress]::Loopback }
+    $l = [System.Net.Sockets.TcpListener]::new($addr, $Port)
+    $l.Start()
+    return $l
+}
+
+try { $listener = Start-Listener $script:LanMode }
+catch { Write-Host "Port $Port is busy. Try: pwsh ./Start-UI.ps1 -Port 8766" -ForegroundColor Red; exit 1 }
+
+function Show-LanStatus {
+    if ($script:LanMode) {
+        foreach ($ip in Get-LanAddresses) { Write-Host "  Receiving PC reports at http://${ip}:$Port/api/report" -ForegroundColor DarkGray }
+    } else {
+        Write-Host '  Local only (turn on PC reports on the System page)' -ForegroundColor DarkGray
+    }
+}
 
 $url = "http://localhost:$Port"
 Write-Host ''
 Write-Host '  Provisioning UI' -ForegroundColor Cyan
 Write-Host "  $url"
-if ($Lan) {
-    foreach ($ip in Get-LanAddresses) { Write-Host "  PCs report to: http://${ip}:$Port/api/report" -ForegroundColor DarkGray }
-}
+Show-LanStatus
 Write-Host '  Ctrl+C to stop'
 Write-Host ''
 
@@ -300,35 +320,93 @@ if (-not $NoBrowser) {
     } catch { }
 }
 
+$conns = [System.Collections.Generic.List[object]]::new()
+$buf = [byte[]]::new(65536)
+$IdleSeconds = 20
+
+function Send-Reply($Conn, [int]$Status, [byte[]]$Body, [string]$Type) {
+    $stream = $Conn.tcp.GetStream()
+    Write-Response $stream $Status $Body $Type
+}
+
 try {
     while ($true) {
-        if (-not $listener.Pending()) { Start-Sleep -Milliseconds 40; continue }
-        $tcp = $listener.AcceptTcpClient()
-        $stream = $null
-        try {
-            $tcp.ReceiveTimeout = 15000; $tcp.SendTimeout = 15000
-            $stream = $tcp.GetStream()
-            $remote = ([System.Net.IPEndPoint]$tcp.Client.RemoteEndPoint).Address
-            $fromLoopback = [System.Net.IPAddress]::IsLoopback($remote) -or ($remote.IsIPv4MappedToIPv6 -and [System.Net.IPAddress]::IsLoopback($remote.MapToIPv4()))
-            $req = Read-Request $stream
-            if (-not $req) { continue }
-            try {
-                $res = Invoke-Request $req $fromLoopback
-                Write-Response $stream $res.status $res.body $res.type
-            } catch {
-                $status = if ($_.Exception -is [HttpError]) { $_.Exception.Status } else { 400 }
-                $msg = $_.Exception.Message
-                if ($status -ge 500 -or $status -eq 400) { Write-Host "  $($req.Method) $($req.Path) -> $status $msg" -ForegroundColor Yellow }
-                Write-Response $stream $status (ConvertTo-JsonBytes @{ error = $msg }) $ContentTypes['.json']
-            }
-        } catch {
-            Write-Host "  connection error: $($_.Exception.Message)" -ForegroundColor DarkGray
-        } finally {
-            if ($stream) { $stream.Dispose() }
-            $tcp.Close()
+        $busy = $false
+
+        while ($listener.Pending()) {
+            $t = $listener.AcceptTcpClient()
+            $t.NoDelay = $true
+            $t.SendTimeout = 15000
+            $remote = ([System.Net.IPEndPoint]$t.Client.RemoteEndPoint).Address
+            $loop = [System.Net.IPAddress]::IsLoopback($remote) -or ($remote.IsIPv4MappedToIPv6 -and [System.Net.IPAddress]::IsLoopback($remote.MapToIPv4()))
+            $conns.Add(@{ tcp = $t; data = [System.IO.MemoryStream]::new(); last = [DateTime]::UtcNow; loopback = $loop })
+            $busy = $true
         }
+
+        for ($i = $conns.Count - 1; $i -ge 0; $i--) {
+            $c = $conns[$i]
+            $close = $false
+            try {
+                $sock = $c.tcp.Client
+                if ($c.tcp.Available -gt 0) {
+                    $n = $sock.Receive($buf)
+                    $c.data.Write($buf, 0, $n)
+                    $c.last = [DateTime]::UtcNow
+                    $busy = $true
+                    $req = $null
+                    try { $req = ConvertFrom-RequestBytes $c.data.ToArray() }
+                    catch {
+                        $st = if ($_.Exception -is [HttpError]) { $_.Exception.Status } else { 400 }
+                        Send-Reply $c $st (ConvertTo-JsonBytes @{ error = $_.Exception.Message }) $ContentTypes['.json']
+                        $close = $true
+                    }
+                    if ($req) {
+                        try {
+                            $res = Invoke-Request $req $c.loopback
+                            Send-Reply $c $res.status $res.body $res.type
+                        } catch {
+                            $status = if ($_.Exception -is [HttpError]) { $_.Exception.Status } else { 400 }
+                            $msg = $_.Exception.Message
+                            if ($status -eq 400 -or $status -ge 500) { Write-Host "  $($req.Method) $($req.Path) -> $status $msg" -ForegroundColor Yellow }
+                            Send-Reply $c $status (ConvertTo-JsonBytes @{ error = $msg }) $ContentTypes['.json']
+                        }
+                        $close = $true
+                    }
+                } elseif ($sock.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead) -and $c.tcp.Available -eq 0) {
+                    $close = $true   # closed by the browser
+                } elseif (([DateTime]::UtcNow - $c.last).TotalSeconds -gt $IdleSeconds) {
+                    $close = $true   # idle pre-connect: drop quietly
+                }
+            } catch {
+                $close = $true
+            }
+            if ($close) {
+                try { $c.tcp.Close() } catch { }
+                $conns.RemoveAt($i)
+            }
+        }
+
+        if ($null -ne $script:PendingLan) {
+            $want = $script:PendingLan
+            $script:PendingLan = $null
+            if ($want -ne $script:LanMode) {
+                $listener.Stop()
+                try {
+                    $listener = Start-Listener $want
+                    $script:LanMode = $want
+                } catch {
+                    Write-Host "  Could not switch network mode: $($_.Exception.Message)" -ForegroundColor Yellow
+                    $listener = Start-Listener $script:LanMode
+                }
+                Write-JsonFile $SettingsFile @{ lan = $script:LanMode }
+                Show-LanStatus
+            }
+        }
+
+        if (-not $busy) { Start-Sleep -Milliseconds 15 }
     }
 } finally {
     $listener.Stop()
+    foreach ($c in $conns) { try { $c.tcp.Close() } catch { } }
     Get-Job -Name 'build-*' -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
 }
