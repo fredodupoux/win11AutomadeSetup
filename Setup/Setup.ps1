@@ -176,6 +176,7 @@ $ReportToken = [string](Get-Cfg $Client 'build.report.token' '')
 $script:RebootRequired = $false
 $script:WingetReady    = $false
 $script:AnyDeskId      = ''
+$script:Hardware       = $null
 
 Write-Host '============================================'
 Write-Host "  Windows 11 provisioning - $Org"
@@ -207,6 +208,51 @@ function Get-MachineFacts {
     }
 }
 
+# What this PC is made of, so it can be checked against what was ordered.
+# Readable text; each part is best effort ('' if Windows can't say).
+# Disk sizes are decimal GB, as printed on the box; USB drives are left out.
+function Get-HardwareSpecs([switch]$Refresh) {
+    if ($script:Hardware -and -not $Refresh) { return $script:Hardware }
+    $hw = [ordered]@{ cpu = ''; ram = ''; storage = ''; gpu = ''; windows = ''; windowsBuild = '' }
+    try {
+        $hw.cpu = @(Get-CimInstance Win32_Processor -ErrorAction Stop | ForEach-Object {
+            '{0} ({1} cores, {2} threads)' -f ([string]$_.Name -replace '\s+', ' ').Trim(), $_.NumberOfCores, $_.NumberOfLogicalProcessors
+        }) -join '; '
+    } catch { }
+    try {
+        $modules = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop)
+        if ($modules.Count -gt 0) {
+            $total = [double](($modules | Measure-Object -Property Capacity -Sum).Sum)
+            $layout = @($modules | Group-Object { [math]::Round($_.Capacity / 1GB) } |
+                        ForEach-Object { '{0} x {1} GB' -f $_.Count, $_.Name }) -join ' + '
+            $speed = $modules[0].ConfiguredClockSpeed
+            if ($speed) { $layout += ", $speed MT/s" }
+            $hw.ram = '{0:0} GB ({1})' -f ($total / 1GB), $layout
+        }
+    } catch { }
+    try {
+        $hw.storage = @(Get-PhysicalDisk -ErrorAction Stop | Where-Object { [string]$_.BusType -ne 'USB' } | ForEach-Object {
+            $kind = if ([string]$_.MediaType -in @('SSD', 'HDD')) { [string]$_.MediaType } else { 'drive' }
+            '{0:0} GB {1} {2} ({3})' -f ($_.Size / 1e9), $_.BusType, $kind, ([string]$_.FriendlyName).Trim()
+        }) -join '; '
+    } catch { }
+    try {
+        $video = @(Get-CimInstance Win32_VideoController -ErrorAction Stop)
+        # Real graphics hardware sits on the PCI bus; remote-desktop tools add virtual adapters
+        $physical = @($video | Where-Object { [string]$_.PNPDeviceID -like 'PCI\*' })
+        if ($physical.Count -eq 0) { $physical = $video }
+        $hw.gpu = @($physical | ForEach-Object { ([string]$_.Name).Trim() } | Select-Object -Unique) -join '; '
+    } catch { }
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $current = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+        $hw.windows = ('{0} {1}' -f ([string]$os.Caption -replace '^Microsoft\s+', '').Trim(), $current.DisplayVersion).Trim()
+        $hw.windowsBuild = '{0}.{1}' -f $current.CurrentBuildNumber, $current.UBR
+    } catch { }
+    $script:Hardware = $hw
+    return $hw
+}
+
 # The end of this PC's setup log (the transcript), sent with each report so a
 # tech can follow the PC from the provisioning UI.
 function Get-LogTail([int]$MaxChars = 200000) {
@@ -232,6 +278,7 @@ function Send-Report([string]$State, [switch]$Quiet) {
             mac          = $facts.mac
             ipAddress    = $facts.ipAddress
             anydeskId    = $script:AnyDeskId
+            hardware     = (Get-HardwareSpecs)
             startedAt    = $StartedAt
             finishedAt   = $(if ($State -eq 'done') { (Get-Date).ToString('s') } else { '' })
             currentStep  = $(if ($State -eq 'done') { '' } else { $script:CurrentStep })
@@ -273,6 +320,13 @@ if ($OSBuild -lt 22000) {
     exit 1
 }
 Write-Host "[OK] Windows 11 build $OSBuild"
+
+$specs = Get-HardwareSpecs
+Write-Host "Processor : $($specs.cpu)"
+Write-Host "Memory    : $($specs.ram)"
+Write-Host "Storage   : $($specs.storage)"
+Write-Host "Graphics  : $($specs.gpu)"
+Write-Host "Windows   : $($specs.windows) (build $($specs.windowsBuild))"
 
 # ================================================================
 # Steps
@@ -680,6 +734,8 @@ Write-Host ''
 Write-Host "Log: $LogFile"
 
 $facts = Get-MachineFacts
+# Read again: Windows Update may have installed the graphics driver
+$hardware = Get-HardwareSpecs -Refresh
 @{
     state        = $state
     organization = $Org
@@ -693,6 +749,7 @@ $facts = Get-MachineFacts
     model        = $facts.model
     ipAddress    = $facts.ipAddress
     anydeskId    = $script:AnyDeskId
+    hardware     = $hardware
     results      = @($Results)
     log          = $LogFile
 } | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $ProvDir 'status.json') -Encoding UTF8

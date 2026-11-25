@@ -70,7 +70,11 @@ On the PC: `C:\ProgramData\Provisioning\status.json` (result per step) and `C:\P
 
 **Following PCs from the UI** (UI started with `-Lan`, media built with "PCs report their progress"): each PC reports at every step.
 The batch tile shows the current step ("Step 7 of 19: Apps (winget) · running 3 min"), the PC's IP address and AnyDesk ID.
-**Details** opens every step's result, the PC's model/serial/MAC and its live setup log.
+**Details** opens every step's result, the PC's model/serial/MAC, its hardware and its live setup log.
+
+**Checking the PCs you bought:** each PC reports its processor, memory, storage, graphics and Windows version.
+**Hardware** on a batch lists them side by side and highlights values that aren't the same on most PCs.
+The same details are shown at the start of the setup log and saved in `status.json` on the PC.
 
 ---
 

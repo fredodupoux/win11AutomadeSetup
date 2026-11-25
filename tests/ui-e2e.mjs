@@ -87,6 +87,7 @@ try {
   // A PC reports its progress: plain-language tile, details window with steps + log
   const report = (extra) => js(`fetch('/api/clients/beta').then(r => r.json()).then(d => fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(Object.assign({ token: d.batches.batches[0].token, computerName: 'BETA-PC-02', ipAddress: '10.0.0.42', anydeskId: '987654321',
+      hardware: { cpu: 'Intel N100', ram: '16 GB (1 x 16 GB)', storage: '512 GB NVMe SSD (A)', gpu: 'Intel UHD', windows: 'Windows 11 Pro 24H2', windowsBuild: '26100.1' },
       results: [{ step: 'WiFi', status: 'ok', detail: 'Internet connection available' }, { step: 'Custom script', status: 'fail', detail: 'exit code 1' }] }, ${JSON.stringify(extra)})) }).then(r => r.status))`);
   ok(await report({ state: 'running', currentStep: 'Apps (winget)', stepIndex: 5, stepTotal: 19, stepStartedAt: new Date().toISOString(), log: 'Installing Google.Chrome...\nLOG-MARKER' }) === 200, 'progress report accepted');
   await send('Page.navigate', { url: `${base}/#/client/beta/batches` });
@@ -94,8 +95,18 @@ try {
   await click('[data-open-machine]');
   ok(await waitFor(`!!document.querySelector('.modal .log') && document.querySelector('.modal .log').textContent.includes('LOG-MARKER')`), 'details window shows the PC log');
   ok(await js(`document.querySelector('.modal').innerText.includes('10.0.0.42') && document.querySelector('.modal').innerText.includes('987654321') && document.querySelectorAll('.modal .steps-table tr').length === 3`), 'details window shows IP, AnyDesk ID and steps');
+  ok(await js(`document.querySelector('.modal .hw-table').innerText.includes('512 GB NVMe SSD') && document.querySelector('.modal .hw-table').innerText.includes('build 26100.1')`), 'details window shows the hardware');
   await click('#m-close');
   ok(await waitFor(`!document.querySelector('.modal-back')`), 'details window closes');
+  // A second PC with less memory: the batch's hardware table highlights only what differs
+  await report({ state: 'running', computerName: 'BETA-PC-03', hardware: { cpu: 'Intel N100', ram: '8 GB (1 x 8 GB)', storage: '512 GB NVMe SSD (B)', gpu: 'Intel UHD', windows: 'Windows 11 Pro 24H2', windowsBuild: '26100.2' } });
+  await send('Page.navigate', { url: `${base}/#/client/beta` });
+  await send('Page.navigate', { url: `${base}/#/client/beta/batches` });
+  ok(await waitFor(`!!document.querySelector('[data-hardware]')`), 'batch has a Hardware button');
+  await click('[data-hardware]');
+  ok(await waitFor(`document.querySelectorAll('.modal .hw-table tbody tr').length === 2`), 'hardware table lists the PCs that reported');
+  ok(await js(`[...new Set([...document.querySelectorAll('.modal td.differs')].map(e => e.dataset.hw))].join() === 'ram'`), 'only the memory differs (disk model and Windows build are ignored)');
+  await click('#m-close');
   ok(await report({ state: 'done', failures: 1, finishedAt: new Date().toISOString(), log: 'PROVISIONING FINISHED' }) === 200, 'final report accepted');
   await send('Page.navigate', { url: `${base}/#/client/beta` });
   await send('Page.navigate', { url: `${base}/#/client/beta/batches` });

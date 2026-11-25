@@ -126,6 +126,11 @@ tr.clickable:hover td { background: var(--bg); }
 .steps-table .step-skip { color: var(--muted); }
 .steps-table .step-running { background: var(--info-bg); }
 .log.tall { max-height: 420px; }
+.modal.wide { width: min(1320px, 100%); }
+.scroll-x { overflow-x: auto; }
+.hw-table td, .hw-table th { padding: 6px 8px; vertical-align: top; font-size: 13px; }
+.hw-table tbody th { width: 110px; }
+.hw-table td.differs { background: var(--warn-bg); color: var(--warn); font-weight: 600; }
 
 .media-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .media-option { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; cursor: pointer; display: flex; gap: 10px; }

@@ -85,9 +85,10 @@ needs go in an optional per-client script.
 | | ID | Task | Notes |
 |---|---|---|---|
 | ✅ | 4.1 | PCs report back | `status.json` on the PC + POST to the UI with `-Lan` (F17); working on the SAFITEK PCs (2026-11-24) |
-| 🧪 | 4.2 | Locale/keyboard per client | Answer files use the client's language/keyboard |
-| 🧪 | 4.4 | AnyDesk unattended access | Password from secrets, AnyDesk ID + IP address on the batch tiles (F25, F26) |
-| 🧪 | 4.3 | WPA3 WiFi | WPA3-Personal, open, hidden: done. Enterprise 802.1X: ❌ dropped (needs per-user credentials; revisit if a client needs it) |
+| ✅ | 4.2 | Locale/keyboard per client | Answer files use the client's language/keyboard. Confirmed by the user (2026-11-24) |
+| ✅ | 4.4 | AnyDesk unattended access | Password from secrets, AnyDesk ID + IP address on the batch tiles (F25, F26). Confirmed by the user (2026-11-24) |
+| 🧪 | 4.5 | Hardware details | CPU, RAM, storage, graphics, Windows version per PC; **Hardware** table per batch highlights differences, to check PCs against the order. Needs a rebuilt ISO and one PC; PCs set up earlier don't report it |
+| ✅ | 4.3 | WPA3 WiFi | WPA3-Personal, open, hidden: done. Enterprise 802.1X: ❌ dropped (needs per-user credentials; revisit if a client needs it). Phase 4 confirmed by the user (2026-11-24) |
 
 ---
 
@@ -97,7 +98,7 @@ needs go in an optional per-client script.
 |---|---|---|---|
 | ✅ | F1 | Auto sign-in **once** after the sysprep reboot | Doesn't happen on the SAFITEK PCs: the tech signs in as itsupport and Setup starts. User accepts this (2026-11-24) |
 | ✅ | F2 | Windows Update retry / fallback | SAFITEKHT-CS-03 and -06 (2026-11-24): updates installed; on -06 the first attempt failed and the retry worked; summary and final report sent |
-| 🧪 | F3 | SoWork silent install (`/S`) | SAFITEKHT-CS-03: installer finished OK. Still to check: SoWork opens for `csagent`. SAFITEKHT-CS-07 (2026-11-24): installer OK again |
+| ✅ | F3 | SoWork silent install (`/S`) | SoWork installer finished OK on SAFITEKHT-CS-03 and -07. Confirmed by the user (2026-11-24) |
 | 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users |
 | ✅ | F5 | Auto sign-in OFF after the final reboot | Confirmed by the user on the SAFITEK PCs (2026-11-24) |
 | 🧪 | F6 | Clean-install ISO | `Build-ISO.ps1` / UI on Windows as Administrator, boot in a VM |
@@ -115,14 +116,14 @@ needs go in an optional per-client script.
 | ✅ | F19 | UI slow / "← Clients" did nothing / "Operation timed out" in the terminal (Safari worst) | Server waited on idle browser pre-connections one at a time; now serves whichever connection has data and drops idle ones. Regression test added |
 | ✅ | F20 | Batch form vanished while typing | The batch list's 8 s auto-refresh kept running when the form opened; now stopped while a form is open. Regression test added |
 | ✅ | F22 | Provisioning ISO build showed "failed" (`NotSpecified ... RemoteException`) although the ISO was fine | `hdiutil` writes an empty line to stderr, which a background job reports as an error. Tool output is now captured, and a build only fails if the job fails or returns nothing. Test added |
-| 🧪 | F23 | winget showed one long line of garbled characters instead of its progress bar | `Setup.ps1` piped winget (`\| Out-Host`), so winget wasn't writing to the window. Now runs attached to the window via `Invoke-Winget`; winget's own output goes to `C:\ProgramData\Provisioning\logs\winget_<app>.log`. Needs a rebuilt ISO + one PC to confirm |
+| ✅ | F23 | winget showed one long line of garbled characters instead of its progress bar | `Setup.ps1` piped winget (`\| Out-Host`), so winget wasn't writing to the window. Now runs attached to the window via `Invoke-Winget`; winget's own output goes to `C:\ProgramData\Provisioning\logs\winget_<app>.log`. Confirmed by the user (2026-11-24) |
 | 🧪 | F24 | SAFITEK custom script failed: it is a Command Prompt (batch) script, run as PowerShell | `Setup.ps1` now runs a custom script starting with `@echo off` / `rem` / `::` / `setlocal` through `cmd.exe`. Note: this script installs WhatsApp **from the Microsoft Store** (`winget download --source msstore` + `Add-AppxProvisionedPackage`), which goes against D5; the user chose it. Test it once by hand on a PC. SAFITEK's custom script is now switched off, so the 2026-11-24 ISO doesn't run it |
-| 🧪 | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json`. SAFITEKHT-CS-07: password set and ID reported. Still to check: connect with the password |
+| ✅ | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json`. Confirmed by the user (2026-11-24) |
 | ✅ | F26 | PC IP address in reports | Reported from the first report (right after WiFi), shown on the batch tile, so a PC can be reached by IP during setup. Confirmed on SAFITEKHT-CS-07 (2026-11-24): IP reported during setup |
-| 🧪 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs: Setup now waits up to 10 minutes before warning |
-| 🧪 | F28 | PC status a tech can read: PC 6 showed "failed" although it finished (only the custom script failed) | A PC that reaches the end is now "Finished · N step(s) failed". Setup reports at the start of every step (step N of M, how long it's been running) with its setup log; tiles show the step, IP, AnyDesk ID and last report; **Details** opens every step's result, PC facts and the live log. Logs stored in `clients/<client>/reports/<batch>/<n>.log`. Needs one PC from a rebuilt ISO. SAFITEKHT-CS-07: current step, step results, IP, AnyDesk ID and log received (seen up to step 16 of 17, Windows Update). Still to check: the final "Finished" report |
+| ✅ | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs: Setup now waits up to 10 minutes before warning. Confirmed by the user (2026-11-24). SAFITEKHT-CS-09 still reached the 10-minute warning, then came online (AnyDesk ID not available at that step) |
+| ✅ | F28 | PC status a tech can read: PC 6 showed "failed" although it finished (only the custom script failed) | A PC that reaches the end is now "Finished · N step(s) failed". Setup reports at the start of every step (step N of M, how long it's been running) with its setup log; tiles show the step, IP, AnyDesk ID and last report; **Details** opens every step's result, PC facts and the live log. Logs stored in `clients/<client>/reports/<batch>/<n>.log`. Final "Finished" report received from SAFITEKHT-CS-07. Confirmed by the user (2026-11-24) |
 | 🧪 | F29 | Every PC downloads the same Windows updates | New `shareUpdates` switch (on by default): Delivery Optimization shares downloads on the local network and keeps files 30 days. The Windows Update step reports MB from the internet vs from other PCs. Helps only while an already-updated PC is on. Needs a rebuilt ISO and two PCs |
-| 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
+| ✅ | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated. Safari: confirmed by the user (2026-11-24) |
 | ✅ | F18 | Media built before `2cdbc6f` | Old-format builds deleted (`dist/safitek/usb`, `dist/solima/usb`; the old ISO was already gone). Rebuild from the UI (2026-11-24) |
 
 ---

@@ -638,6 +638,7 @@ function renderBatches(editId = null) {
         <span class="spacer"></span>
         <span class="badge ok">${tally.done} finished</span><span class="badge info">${tally.running} in progress</span>
         ${tally.issues ? `<span class="badge warn">${tally.issues} with a failed step</span>` : ''}<span class="badge">${tally.used} used</span>
+        ${Object.values(machines).some((m) => m.hardware) ? `<button class="small" data-hardware="${esc(b.id)}">Hardware</button>` : ''}
         <button class="small" data-edit-batch="${esc(b.id)}">Edit</button>
         <button class="small primary" data-build-batch="${esc(b.id)}">Build media</button>
       </div>
@@ -658,6 +659,7 @@ function renderBatches(editId = null) {
   $('#new-batch').onclick = () => renderBatches('new');
   $$('[data-edit-batch]').forEach((b) => b.onclick = () => renderBatches(b.dataset.editBatch));
   $$('[data-build-batch]').forEach((b) => b.onclick = () => { state.build.client = ed.name; state.build.batch = b.dataset.buildBatch; location.hash = '#/build'; });
+  $$('[data-hardware]').forEach((btn) => btn.onclick = () => openHardware(btn.dataset.hardware));
   $$('[data-open-machine]').forEach((btn) => btn.onclick = () => {
     const [bid, n] = btn.dataset.openMachine.split(':');
     openMachine(bid, Number(n));
@@ -682,6 +684,52 @@ function renderBatches(editId = null) {
 }
 
 // ---------- one PC: steps + log ----------
+
+const HARDWARE = [['cpu', 'Processor'], ['ram', 'Memory'], ['storage', 'Storage'], ['gpu', 'Graphics'], ['windows', 'Windows']];
+const windowsText = (hw) => `${esc(hw.windows || '')}${hw.windowsBuild ? ` <span class="muted">build ${esc(hw.windowsBuild)}</span>` : ''}`;
+const hardwareCell = (hw, key) => (key === 'windows' ? windowsText(hw) : esc(hw[key] || ''));
+// What is compared between PCs: not the disk's model name, not the Windows build
+const hardwareKey = (hw, key) => (key === 'storage' ? String(hw.storage || '').replace(/ \([^;]*\)(?=;|$)/g, '') : String(hw[key] || ''));
+
+// Side-by-side hardware of a batch's PCs, to check them against what was ordered
+async function openHardware(batchId) {
+  closeMachine();
+  const ed = state.editor;
+  try { await refreshBatches(); } catch (err) { toast(err.message, true); return; }
+  const b = ed.batches.find((x) => x.id === batchId);
+  if (!b) return;
+  const pattern = b.computerNamePattern || ed.client.computerNamePattern;
+  const pcs = [];
+  for (let n = b.start; n <= b.end; n++) {
+    const m = (b.machines || {})[String(n)];
+    if (m && m.hardware) pcs.push({ name: m.computerName || formatName(pattern, n), serial: m.serial || '', hw: m.hardware });
+  }
+  // A column's usual value is the one most PCs have; with a tie, none is "usual"
+  const usual = {};
+  HARDWARE.forEach(([key]) => {
+    const count = new Map();
+    pcs.forEach((p) => count.set(hardwareKey(p.hw, key), (count.get(hardwareKey(p.hw, key)) || 0) + 1));
+    const max = Math.max(...count.values());
+    const top = [...count].filter(([, c]) => c === max);
+    usual[key] = top.length === 1 ? top[0][0] : null;
+  });
+  const rows = pcs.map((p) => `<tr><td class="mono">${esc(p.name)}</td>
+      ${HARDWARE.map(([key]) => `<td data-hw="${key}" class="${hardwareKey(p.hw, key) === usual[key] ? '' : 'differs'}">${hardwareCell(p.hw, key)}</td>`).join('')}
+      <td class="mono">${esc(p.serial)}</td></tr>`).join('');
+  const total = b.end - b.start + 1;
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `<div class="modal wide" role="dialog" aria-modal="true">
+      <div class="row"><h2 style="margin:0">Hardware · ${esc(b.name)}</h2><span class="spacer"></span><button class="small" id="m-close">Close</button></div>
+      <p class="muted">${pcs.length} of ${total} PCs reported their hardware. Highlighted values are not the same on most PCs.
+        ${pcs.length < total ? 'PCs not set up yet, or set up with older media, are not listed.' : ''}</p>
+      <div class="scroll-x"><table class="hw-table"><thead><tr><th>PC</th>${HARDWARE.map(([, t]) => `<th>${t}</th>`).join('')}<th>Serial number</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  back.addEventListener('click', (e) => { if (e.target === back) closeMachine(); });
+  back.querySelector('#m-close').onclick = closeMachine;
+  document.body.appendChild(back);
+  document.addEventListener('keydown', machineKeys);
+}
 
 const STEP_ICON = { ok: '✓', warn: '!', fail: '✗', skip: '–' };
 const STEP_WORD = { ok: 'OK', warn: 'Warning', fail: 'Failed', skip: 'Skipped' };
@@ -738,6 +786,7 @@ async function openMachine(batchId, n) {
         ${fact('Model', [m.manufacturer, m.model].filter(Boolean).join(' '))}${fact('Serial number', m.serial, true)}${fact('MAC address', (m.mac || '').split(';').join('\n'), true)}
       </div>
       ${v.done ? '<p class="muted">Setup is finished. The PC restarts on its own and is ready for the user. Failed steps can be fixed by hand or with the backup menu (Launch-Setup.cmd).</p>' : ''}
+      ${m.hardware ? `<h3>Hardware</h3><table class="hw-table"><tbody>${HARDWARE.map(([key, t]) => `<tr><th>${t}</th><td>${hardwareCell(m.hardware, key) || '<span class="muted">unknown</span>'}</td></tr>`).join('')}</tbody></table>` : ''}
       <h3>Steps</h3>
       ${rows || running ? `<table class="steps-table"><tbody>${rows}${running}</tbody></table>` : '<p class="muted">No steps reported yet.</p>'}
       <h3>Setup log <span class="muted">(last part of C:\\ProgramData\\Provisioning\\logs on the PC)</span></h3>

@@ -505,7 +505,7 @@ function Add-MachineReport($Report) {
     if ($null -eq $number) { throw "Computer name '$($Report.computerName)' does not match pattern '$pattern'" }
     $fields = @{}
     foreach ($k in 'state', 'computerName', 'serial', 'manufacturer', 'model', 'mac', 'startedAt', 'finishedAt', 'warnings', 'failures', 'results',
-                   'anydeskId', 'ipAddress', 'currentStep', 'stepIndex', 'stepTotal', 'stepStartedAt') {
+                   'anydeskId', 'ipAddress', 'hardware', 'currentStep', 'stepIndex', 'stepTotal', 'stepStartedAt') {
         if ($Report.Contains($k)) { $fields[$k] = $Report[$k] }
     }
     # Setup always runs to the end; a failed step shows in 'failures', not as a failed PC.

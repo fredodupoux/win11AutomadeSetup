@@ -157,6 +157,10 @@ try {
     $m = Add-MachineReport $report
     Assert ($m.status -eq 'done' -and $m.number -eq 5) 'report marks PC 5 done'
     Assert ($m.anydeskId -eq '123456789' -and $m.ipAddress -eq '10.16.20.41') 'report keeps the AnyDesk ID and IP address'
+    $report.hardware = @{ cpu = 'Intel N100 (4 cores, 4 threads)'; ram = '16 GB (1 x 16 GB)'; storage = '512 GB NVMe SSD (X)'; gpu = 'Intel UHD'; windows = 'Windows 11 Pro 24H2'; windowsBuild = '26100.1' }
+    [void](Add-MachineReport $report)
+    $saved = (Get-ClientData -Name 'acme').batches.batches | Where-Object { $_.id -eq $batch.id }
+    Assert ($saved.machines['5'].hardware.ram -eq '16 GB (1 x 16 GB)' -and $saved.machines['5'].hardware.windowsBuild -eq '26100.1') 'hardware details saved with the PC'
     $report.token = 'wrong'
     Assert-Throws { Add-MachineReport $report } 'wrong token rejected'
     $report.token = $batch.token; $report.computerName = 'OTHER-01'
@@ -175,6 +179,47 @@ try {
     $progress.state = 'failed'; $progress.failures = 1; $progress.finishedAt = '2026-11-24T20:30:00'
     $m = Add-MachineReport $progress
     Assert ($m.status -eq 'done') 'a PC that finished with a failed step counts as finished'
+
+    Section 'Hardware details'
+    # Get-HardwareSpecs from Setup.ps1, run against stand-ins for the Windows commands
+    $setupAst = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $Sandbox 'Setup/Setup.ps1'), [ref]$null, [ref]$null)
+    $fn = $setupAst.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-HardwareSpecs' }, $true)
+    $hw = & {
+        Set-StrictMode -Version Latest
+        function Get-CimInstance($ClassName) {
+            switch ($ClassName) {
+                'Win32_Processor' { [pscustomobject]@{ Name = 'Intel(R)  N100 '; NumberOfCores = 4; NumberOfLogicalProcessors = 4 } }
+                'Win32_PhysicalMemory' { 1..2 | ForEach-Object { [pscustomobject]@{ Capacity = [uint64]8GB; ConfiguredClockSpeed = 3200 } } }
+                'Win32_VideoController' {
+                    [pscustomobject]@{ Name = 'Intel(R) UHD Graphics'; PNPDeviceID = 'PCI\VEN_8086' }
+                    [pscustomobject]@{ Name = 'AnyDesk Virtual Display'; PNPDeviceID = 'ROOT\DISPLAY\0000' }
+                }
+                'Win32_OperatingSystem' { [pscustomobject]@{ Caption = 'Microsoft Windows 11 Pro' } }
+            }
+        }
+        function Get-PhysicalDisk {
+            [pscustomobject]@{ Size = [uint64]512110190592; BusType = 'NVMe'; MediaType = 'SSD'; FriendlyName = 'ACME 512' }
+            [pscustomobject]@{ Size = [uint64]32000000000; BusType = 'USB'; MediaType = 'Unspecified'; FriendlyName = 'USB stick' }
+        }
+        function Get-ItemProperty { [pscustomobject]@{ DisplayVersion = '24H2'; CurrentBuildNumber = '26100'; UBR = 2314 } }
+        $script:Hardware = $null
+        . ([scriptblock]::Create($fn.Extent.Text))
+        Get-HardwareSpecs
+    }
+    Assert ($hw.cpu -eq 'Intel(R) N100 (4 cores, 4 threads)') "processor: $($hw.cpu)"
+    Assert ($hw.ram -eq '16 GB (2 x 8 GB, 3200 MT/s)') "memory: $($hw.ram)"
+    Assert ($hw.storage -eq '512 GB NVMe SSD (ACME 512)') "storage, without USB drives: $($hw.storage)"
+    Assert ($hw.gpu -eq 'Intel(R) UHD Graphics') "graphics, without virtual adapters: $($hw.gpu)"
+    Assert ($hw.windows -eq 'Windows 11 Pro 24H2' -and $hw.windowsBuild -eq '26100.2314') "windows: $($hw.windows) $($hw.windowsBuild)"
+    $none = & {
+        Set-StrictMode -Version Latest
+        function Get-CimInstance { throw 'unavailable' }
+        function Get-PhysicalDisk { throw 'unavailable' }
+        $script:Hardware = $null
+        . ([scriptblock]::Create($fn.Extent.Text))
+        Get-HardwareSpecs
+    }
+    Assert ($none.cpu -eq '' -and $none.storage -eq '' -and $none.windows -eq '') 'unreadable hardware is left blank, never an error'
 
     Section 'Legacy migration'
     $legacyDir = Join-Path $Sandbox 'clients/oldco'
