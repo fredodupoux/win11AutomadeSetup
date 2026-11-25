@@ -56,7 +56,7 @@ Clean install:  Windows installs from the answer file (autounattend.xml) → reb
 
 → OOBE skipped → IT admin created → signs in automatically ONCE
 → Setup.ps1 (never prompts; each step runs on its own, failures don't stop the rest):
-   System settings (name, timezone) → WiFi → wait for internet → report "started"
+   System settings (name, timezone) → update sharing between PCs → WiFi → wait for internet → report "started"
    → winget → Tailscale → apps (winget, direct installers, web-app shortcuts)
    → AnyDesk unattended access (password, ID reported)
    → IT admin (enabled, visible) → end user (must change password)

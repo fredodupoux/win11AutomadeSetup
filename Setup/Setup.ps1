@@ -251,6 +251,17 @@ function Send-Report([string]$State, [switch]$Quiet) {
     }
 }
 
+# How much of the update downloads came from other PCs ('' if Windows can't say)
+function Get-DownloadSources {
+    try {
+        $jobs = @(Get-DeliveryOptimizationStatus -ErrorAction Stop)
+        $http  = [double](($jobs | Measure-Object -Property BytesFromHttp -Sum).Sum)
+        $peers = [double](($jobs | Measure-Object -Property BytesFromPeers -Sum).Sum)
+        if (($http + $peers) -le 0) { return '' }
+        return ('update downloads: {0:N0} MB from the internet, {1:N0} MB from PCs on this network' -f ($http / 1MB), ($peers / 1MB))
+    } catch { return '' }
+}
+
 # ================================================================
 # Pre-flight (fatal on failure)
 # ================================================================
@@ -281,6 +292,17 @@ Invoke-Step 'System settings' {
         Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'RegisteredOrganization' -Value $Org
         Ok-Step "Registered organization $Org"
     }
+}
+
+Invoke-Step 'Update sharing' {
+    # Delivery Optimization: PCs on the same network pass update downloads to each other.
+    # Set before anything downloads. Files are kept 30 days (Windows keeps them 3 by default).
+    if (-not (Test-Feature 'shareUpdates' $true)) { Skip-Step 'turned off for this client'; return }
+    $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization'
+    if (-not (Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
+    Set-ItemProperty -Path $key -Name 'DODownloadMode' -Value 1 -Type DWord          # 1 = local network
+    Set-ItemProperty -Path $key -Name 'DOMaxCacheAge' -Value 2592000 -Type DWord     # seconds
+    Ok-Step 'shared with PCs on the local network, kept 30 days'
 }
 
 Invoke-Step 'WiFi' {
@@ -622,6 +644,8 @@ Invoke-Step 'Windows Update' {
         try { Start-Process -FilePath "$env:WINDIR\System32\UsoClient.exe" -ArgumentList 'StartInteractiveScan' } catch { }
         Warn-Step 'could not install directly - handed off to Windows Update (finishes in the background)'
     }
+    $sources = Get-DownloadSources
+    if ($sources) { Ok-Step $sources }
 }
 
 Invoke-Step 'Auto sign-in off' {

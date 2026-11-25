@@ -325,7 +325,7 @@ function renderSettings() {
         </section>
 
         <section class="panel" id="sec-features"><h2>Security &amp; features</h2>
-          ${['automaticUpdates', 'firewall', 'screenLockOnWake', 'remoteDesktop', 'disableSmb1', 'dellCommandUpdate', 'windowsUpdate']
+          ${['automaticUpdates', 'firewall', 'screenLockOnWake', 'remoteDesktop', 'disableSmb1', 'dellCommandUpdate', 'windowsUpdate', 'shareUpdates']
             .map((k) => toggle(`client.features.${k}`, labelFor(k), meta.features[k])).join('')}
           <p class="muted">Auto sign-in is always turned off at the end of setup.</p>
         </section>
@@ -364,7 +364,7 @@ function renderSettings() {
 function labelFor(k) {
   return ({
     automaticUpdates: 'Automatic Windows updates', firewall: 'Firewall on', screenLockOnWake: 'Password on wake',
-    remoteDesktop: 'Remote Desktop', disableSmb1: 'Disable SMBv1', dellCommandUpdate: 'Dell Command Update', windowsUpdate: 'Install Windows updates during setup',
+    remoteDesktop: 'Remote Desktop', disableSmb1: 'Disable SMBv1', dellCommandUpdate: 'Dell Command Update', windowsUpdate: 'Install Windows updates during setup', shareUpdates: 'Share update downloads between PCs',
   })[k] || k;
 }
 

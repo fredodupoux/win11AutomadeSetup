@@ -72,6 +72,7 @@ try {
     $v = Save-ClientData -Name 'acme' -Client $acme.client -Secrets $secrets -CustomScript "param(`$Client)`nWrite-Host hi"
     Assert (@($v.errors).Count -eq 0) "valid client has no errors ($((@($v.errors) | ForEach-Object message) -join '; '))"
     Assert (-not ((Get-Content (Join-Path $Sandbox 'clients/acme/client.json') -Raw) -match 'Adm1n')) 'no password in client.json'
+    Assert ((Get-DefaultClient).features.shareUpdates -eq $true) 'update sharing is on by default'
     Assert (Test-Path (Join-Path $Sandbox 'clients/acme/custom.ps1')) 'custom.ps1 saved'
 
     $bad = Copy-Deep $acme.client

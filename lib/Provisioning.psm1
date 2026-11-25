@@ -116,6 +116,7 @@ function Get-DefaultClient {
             disableSmb1       = $true
             dellCommandUpdate = $true
             windowsUpdate     = $true
+            shareUpdates      = $true
             customScript      = $false
         }
         notes               = ''
@@ -152,6 +153,7 @@ function Get-ProvMeta {
             disableSmb1       = 'Disable SMBv1 (legacy, insecure)'
             dellCommandUpdate = 'Install Dell Command Update (Dell hardware only)'
             windowsUpdate     = 'Install Windows updates at the end of setup (slowest step)'
+            shareUpdates      = 'PCs on the same network pass update downloads to each other (files kept 30 days)'
             customScript      = 'Run this client''s custom script near the end of setup'
         }
     }
