@@ -95,15 +95,15 @@ needs go in an optional per-client script.
 
 | | ID | Item | Notes |
 |---|---|---|---|
-| 🧪 | F1 | Auto sign-in **once** after the sysprep reboot | Passwordless-only setting turned off before sysprep / in the clean-install answer file |
+| ✅ | F1 | Auto sign-in **once** after the sysprep reboot | Doesn't happen on the SAFITEK PCs: the tech signs in as itsupport and Setup starts. User accepts this (2026-11-24) |
 | ✅ | F2 | Windows Update retry / fallback | SAFITEKHT-CS-03 (2026-11-24): updates installed, summary and final report sent |
 | 🧪 | F3 | SoWork silent install (`/S`) | SAFITEKHT-CS-03: installer finished OK. Still to check: SoWork opens for `csagent` |
 | 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users |
-| 🧪 | F5 | Auto sign-in OFF after the final reboot | PC must stop at the sign-in screen |
+| ✅ | F5 | Auto sign-in OFF after the final reboot | Confirmed by the user on the SAFITEK PCs (2026-11-24) |
 | 🧪 | F6 | Clean-install ISO | `Build-ISO.ps1` / UI on Windows as Administrator, boot in a VM |
-| 👤 | F7 | PCs set up with the earlier Autologon build still sign in automatically | Run on each: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f` |
+| ✅ | F7 | PCs set up with the earlier Autologon build still sign in automatically | Checked by the user: none of them sign in automatically (2026-11-24) |
 | ✅ | F8 | Clean install prompted for a blank Tailscale key | `Setup.ps1` never prompts; blank = skipped |
-| 👤 | F9 | Berling app list unknown | `clients/berling` got the default list; confirm in the UI |
+| ✅ | F9 | Berling app list unknown | Set by the user in the UI (2026-11-24) |
 | ✅ | F10 | SAFITEK timezone | PCs are in Haiti: set to `Haiti Standard Time` (2026-11-24). Rebuild the SAFITEK ISO to apply |
 | ✅ | F11 | SAFITEK WiFi | `((( Bat Radar )))` confirmed as the site network (2026-11-24) |
 | 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only. Decision 2026-11-24: not yet, wait until testing is done |
@@ -119,9 +119,9 @@ needs go in an optional per-client script.
 | 🧪 | F24 | SAFITEK custom script failed: it is a Command Prompt (batch) script, run as PowerShell | `Setup.ps1` now runs a custom script starting with `@echo off` / `rem` / `::` / `setlocal` through `cmd.exe`. Note: this script installs WhatsApp **from the Microsoft Store** (`winget download --source msstore` + `Add-AppxProvisionedPackage`), which goes against D5; the user chose it. Test it once by hand on a PC |
 | 🧪 | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json` |
 | 🧪 | F26 | PC IP address in reports | Reported from the first report (right after WiFi), shown on the batch tile, so a PC can be reached by IP during setup |
-| 👤 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs. Harmless; the wait can be lengthened if it causes failures |
+| 🧪 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs: Setup now waits up to 10 minutes before warning |
 | 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
-| 👤 | F18 | Media built before `2cdbc6f` | Old ISOs/USBs carry their own old scripts + `config.ps1` and keep working the old way, without batches/reports/status. Rebuild from the UI to get the new behaviour (e.g. `dist/safitek/SAFITEK-Provision.iso` is the old one) |
+| ✅ | F18 | Media built before `2cdbc6f` | Old-format builds deleted (`dist/safitek/usb`, `dist/solima/usb`; the old ISO was already gone). Rebuild from the UI (2026-11-24) |
 
 ---
 

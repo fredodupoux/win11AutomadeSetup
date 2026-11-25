@@ -292,8 +292,9 @@ Invoke-Step 'WiFi' {
             Remove-Item $profilePath -Force -ErrorAction SilentlyContinue
         }
     }
-    if (Wait-Internet) { Ok-Step 'Internet connection available' }
-    else { Warn-Step 'No internet after 3 minutes - downloads will likely fail. Check WiFi/Ethernet.' }
+    # Some PCs take several minutes to join the WiFi: wait up to 10 minutes before warning
+    if (Wait-Internet 600) { Ok-Step 'Internet connection available' }
+    else { Warn-Step 'No internet after 10 minutes - downloads will likely fail. Check WiFi/Ethernet.' }
 }
 
 Send-Report 'started'
