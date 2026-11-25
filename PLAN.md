@@ -96,7 +96,7 @@ needs go in an optional per-client script.
 | | ID | Item | Notes |
 |---|---|---|---|
 | ✅ | F1 | Auto sign-in **once** after the sysprep reboot | Doesn't happen on the SAFITEK PCs: the tech signs in as itsupport and Setup starts. User accepts this (2026-11-24) |
-| ✅ | F2 | Windows Update retry / fallback | SAFITEKHT-CS-03 (2026-11-24): updates installed, summary and final report sent |
+| ✅ | F2 | Windows Update retry / fallback | SAFITEKHT-CS-03 and -06 (2026-11-24): updates installed; on -06 the first attempt failed and the retry worked; summary and final report sent |
 | 🧪 | F3 | SoWork silent install (`/S`) | SAFITEKHT-CS-03: installer finished OK. Still to check: SoWork opens for `csagent` |
 | 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users |
 | ✅ | F5 | Auto sign-in OFF after the final reboot | Confirmed by the user on the SAFITEK PCs (2026-11-24) |
