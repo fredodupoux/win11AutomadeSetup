@@ -104,7 +104,7 @@ needs go in an optional per-client script.
 | ✅ | F7 | PCs set up with the earlier Autologon build still sign in automatically | Checked by the user: none of them sign in automatically (2026-11-24) |
 | ✅ | F8 | Clean install prompted for a blank Tailscale key | `Setup.ps1` never prompts; blank = skipped |
 | ✅ | F9 | Berling app list unknown | Set by the user in the UI (2026-11-24) |
-| ✅ | F10 | SAFITEK timezone | PCs are in Haiti: set to `Haiti Standard Time` (2026-11-24). Rebuild the SAFITEK ISO to apply |
+| 👤 | F10 | SAFITEK timezone | PCs are in Haiti. Set to `Haiti Standard Time`, then overwritten back to Eastern by a save from the old UI (2026-11-24): set it again in the restarted UI |
 | ✅ | F11 | SAFITEK WiFi | `((( Bat Radar )))` confirmed as the site network (2026-11-24) |
 | 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only. Decision 2026-11-24: not yet, wait until testing is done |
 | ✅ | F13 | Passwords on media | Mitigated: secrets separated, never in git, deleted from the PC after a provisioning run. Media itself still holds them: keep it private |
