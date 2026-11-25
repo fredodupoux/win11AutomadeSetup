@@ -295,6 +295,9 @@ $Config_Action1AgentUrl    = 'https://app.action1.com/agent/x/Windows/agent.msi'
         }, $true))
         $ps7Cmds = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandParameterAst] -and $n.ParameterName -in 'AsHashtable', 'Parallel', 'SkipHttpErrorCheck' }, $true))
         Assert (($ps7.Count + $ps7Cmds.Count) -eq 0) "$f uses no PowerShell 7-only syntax"
+        # winget called directly (piped or not) loses its progress bar; use Invoke-Winget
+        $rawWinget = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'winget' }, $true))
+        Assert ($rawWinget.Count -eq 0) "$f runs winget only through Invoke-Winget"
     }
 } finally {
     Remove-Module Provisioning -ErrorAction SilentlyContinue

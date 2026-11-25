@@ -90,6 +90,18 @@ function Wait-Winget([int]$TimeoutSeconds = 600) {
     return [bool](Get-Command winget -ErrorAction SilentlyContinue)
 }
 
+# Runs winget attached to this console window so it draws its own progress bar.
+# Piping winget (| Out-Host) redirects its output: the bar then turns into one long
+# line of garbled characters. Its output is kept in a winget log file instead of the
+# transcript. Returns winget's exit code.
+function Invoke-Winget([string[]]$Arguments, [string]$LogName = '') {
+    $exe = (Get-Command winget -ErrorAction Stop).Source
+    $argList = @($Arguments)
+    if ($LogName) { $argList += @('--log', ('"' + (Join-Path $LogDir "winget_$LogName.log") + '"')) }
+    $p = Start-Process -FilePath $exe -ArgumentList $argList -NoNewWindow -Wait -PassThru
+    return $p.ExitCode
+}
+
 # Adds a user to a built-in group by SID (works on any Windows language); "already a member" is fine.
 function Add-ToLocalGroup([string]$Sid, [string]$User) {
     try {
@@ -278,7 +290,7 @@ Send-Report 'started'
 
 Invoke-Step 'Package manager (winget)' {
     if (-not (Wait-Winget)) { throw "winget not available after 10 minutes - install 'App Installer' and re-run" }
-    winget source update | Out-Null
+    [void](Invoke-Winget @('source', 'update'))
     $script:WingetReady = $true
     Ok-Step 'winget ready'
 }
@@ -288,7 +300,8 @@ Invoke-Step 'Tailscale' {
     if (-not (Test-Feature 'tailscale')) { Skip-Step 'turned off for this client'; return }
     if (-not $key) { Skip-Step 'no auth key'; return }
     if (-not $script:WingetReady) { throw 'winget not available' }
-    winget install --id Tailscale.Tailscale --exact --source winget --accept-source-agreements --accept-package-agreements --silent | Out-Host
+    $code = Invoke-Winget @('install', '--id', 'Tailscale.Tailscale', '--exact', '--source', 'winget', '--silent', '--accept-source-agreements', '--accept-package-agreements') 'Tailscale.Tailscale'
+    if (@(0, -1978335189, -1978335135) -notcontains $code) { throw "winget exit code $code" }
     Start-Sleep -Seconds 10
     $exe = @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe") |
            Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -306,8 +319,7 @@ Invoke-Step 'Apps (winget)' {
     $okCodes = @(0, -1978335189, -1978335135)
     foreach ($id in $ids) {
         Write-Host "Installing $id..."
-        winget install --id $id --exact --source winget --silent --accept-source-agreements --accept-package-agreements | Out-Host
-        $code = $LASTEXITCODE
+        $code = Invoke-Winget @('install', '--id', $id, '--exact', '--source', 'winget', '--silent', '--accept-source-agreements', '--accept-package-agreements') $id
         if ($okCodes -contains $code) { Ok-Step $id }
         elseif ($code -eq -1978335212) { Warn-Step "$id not found in winget" }
         else { Warn-Step "$id failed (winget exit code $code)" }
@@ -444,8 +456,8 @@ Invoke-Step 'Dell Command Update' {
     if (-not (Test-Feature 'dellCommandUpdate' $true)) { Skip-Step 'turned off for this client'; return }
     if ($manufacturer -notlike '*Dell*') { Skip-Step "not a Dell ($manufacturer)"; return }
     if (-not $script:WingetReady) { throw 'winget not available' }
-    winget install --id Dell.CommandUpdate --exact --source winget --accept-source-agreements --accept-package-agreements --silent | Out-Host
-    if (@(0, -1978335189, -1978335135) -notcontains $LASTEXITCODE) { throw "winget exit code $LASTEXITCODE" }
+    $code = Invoke-Winget @('install', '--id', 'Dell.CommandUpdate', '--exact', '--source', 'winget', '--silent', '--accept-source-agreements', '--accept-package-agreements') 'Dell.CommandUpdate'
+    if (@(0, -1978335189, -1978335135) -notcontains $code) { throw "winget exit code $code" }
     Ok-Step 'Installed'
 }
 
