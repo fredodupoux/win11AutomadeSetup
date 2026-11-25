@@ -103,11 +103,11 @@ needs go in an optional per-client script.
 | 👤 | F7 | PCs set up with the earlier Autologon build still sign in automatically | Run on each: `reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 0 /f` |
 | ✅ | F8 | Clean install prompted for a blank Tailscale key | `Setup.ps1` never prompts; blank = skipped |
 | 👤 | F9 | Berling app list unknown | `clients/berling` got the default list; confirm in the UI |
-| 👤 | F10 | SAFITEK timezone | `Eastern Standard Time`; if the PCs are in Haiti, pick `Haiti Standard Time` in the UI |
-| 👤 | F11 | SAFITEK WiFi | `((( Bat Radar )))`: confirm it's the site network |
-| 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only |
+| ✅ | F10 | SAFITEK timezone | PCs are in Haiti: set to `Haiti Standard Time` (2026-11-24). Rebuild the SAFITEK ISO to apply |
+| ✅ | F11 | SAFITEK WiFi | `((( Bat Radar )))` confirmed as the site network (2026-11-24) |
+| 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only. Decision 2026-11-24: not yet, wait until testing is done |
 | ✅ | F13 | Passwords on media | Mitigated: secrets separated, never in git, deleted from the PC after a provisioning run. Media itself still holds them: keep it private |
-| 👤 | F14 | Berling name pattern too long | `BERLING-PROD-PC##` gives 17 characters (Windows max 15). The UI blocks builds until it's shortened, e.g. `BERLING-PRD-##` |
+| ✅ | F14 | Berling name pattern too long | Was `BERLING-PROD-PC##` (17 characters, Windows max 15). Already changed in the UI to `BRLNG-PROD-PC##` (15, valid); `BERLING-PRD-##` is the alternative if preferred |
 | 🧪 | F15 | New `Setup.ps1` on a real PC | Rewritten (JSON, isolated steps, status file); run one PC end to end and read `C:\ProgramData\Provisioning\status.json` |
 | 🧪 | F16 | UI + builds on a Windows tech machine | Start-UI, winget search (uses `winsqlite3.dll`), provisioning ISO via IMAPI2 |
 | 🧪 | F17 | Progress reports over the network | UI with `-Lan`, build with "PCs report their progress", watch the batch tiles; Windows may ask to allow PowerShell through the firewall |
