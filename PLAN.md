@@ -104,7 +104,7 @@ needs go in an optional per-client script.
 | ✅ | F7 | PCs set up with the earlier Autologon build still sign in automatically | Checked by the user: none of them sign in automatically (2026-11-24) |
 | ✅ | F8 | Clean install prompted for a blank Tailscale key | `Setup.ps1` never prompts; blank = skipped |
 | ✅ | F9 | Berling app list unknown | Set by the user in the UI (2026-11-24) |
-| 👤 | F10 | SAFITEK timezone | PCs are in Haiti. Set to `Haiti Standard Time`, then overwritten back to Eastern by a save from the old UI (2026-11-24): set it again in the restarted UI |
+| ✅ | F10 | SAFITEK timezone | `Haiti Standard Time` (set again after an old-UI save reverted it); in the ISO rebuilt 2026-11-24 |
 | ✅ | F11 | SAFITEK WiFi | `((( Bat Radar )))` confirmed as the site network (2026-11-24) |
 | 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only. Decision 2026-11-24: not yet, wait until testing is done |
 | ✅ | F13 | Passwords on media | Mitigated: secrets separated, never in git, deleted from the PC after a provisioning run. Media itself still holds them: keep it private |
@@ -116,7 +116,7 @@ needs go in an optional per-client script.
 | ✅ | F20 | Batch form vanished while typing | The batch list's 8 s auto-refresh kept running when the form opened; now stopped while a form is open. Regression test added |
 | ✅ | F22 | Provisioning ISO build showed "failed" (`NotSpecified ... RemoteException`) although the ISO was fine | `hdiutil` writes an empty line to stderr, which a background job reports as an error. Tool output is now captured, and a build only fails if the job fails or returns nothing. Test added |
 | 🧪 | F23 | winget showed one long line of garbled characters instead of its progress bar | `Setup.ps1` piped winget (`\| Out-Host`), so winget wasn't writing to the window. Now runs attached to the window via `Invoke-Winget`; winget's own output goes to `C:\ProgramData\Provisioning\logs\winget_<app>.log`. Needs a rebuilt ISO + one PC to confirm |
-| 🧪 | F24 | SAFITEK custom script failed: it is a Command Prompt (batch) script, run as PowerShell | `Setup.ps1` now runs a custom script starting with `@echo off` / `rem` / `::` / `setlocal` through `cmd.exe`. Note: this script installs WhatsApp **from the Microsoft Store** (`winget download --source msstore` + `Add-AppxProvisionedPackage`), which goes against D5; the user chose it. Test it once by hand on a PC |
+| 🧪 | F24 | SAFITEK custom script failed: it is a Command Prompt (batch) script, run as PowerShell | `Setup.ps1` now runs a custom script starting with `@echo off` / `rem` / `::` / `setlocal` through `cmd.exe`. Note: this script installs WhatsApp **from the Microsoft Store** (`winget download --source msstore` + `Add-AppxProvisionedPackage`), which goes against D5; the user chose it. Test it once by hand on a PC. SAFITEK's custom script is now switched off, so the 2026-11-24 ISO doesn't run it |
 | 🧪 | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json` |
 | 🧪 | F26 | PC IP address in reports | Reported from the first report (right after WiFi), shown on the batch tile, so a PC can be reached by IP during setup |
 | 🧪 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs: Setup now waits up to 10 minutes before warning |
