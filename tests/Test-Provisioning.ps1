@@ -163,6 +163,18 @@ try {
     $m = Set-MachineStatus -Name 'acme' -BatchId $batch.id -Number 6 -Fields @{ status = 'used'; source = 'manual' }
     Assert ($m.status -eq 'used') 'manual status saved'
 
+    $progress = [ordered]@{ token = $batch.token; state = 'running'; computerName = 'ACME-PC-04'; currentStep = 'Apps (winget)'; stepIndex = 5; stepTotal = 19
+                            stepStartedAt = '2026-11-24T20:00:00'; log = "line 1`nInstalling Google.Chrome..."; results = @() }
+    $m = Add-MachineReport $progress
+    Assert ($m.status -eq 'in-progress' -and $m.currentStep -eq 'Apps (winget)' -and $m.stepIndex -eq 5) 'progress report keeps the current step'
+    Assert ($m.hasLog -and -not $m.Contains('log')) 'log is kept out of batches.json'
+    Assert ((Get-MachineLog -Name 'acme' -BatchId $batch.id -Number 4) -like '*Installing Google.Chrome*') 'PC log saved to its own file'
+    Assert ((Get-MachineLog -Name 'acme' -BatchId $batch.id -Number 3) -eq '') 'no log yet is empty'
+    Assert-Throws { Get-MachineLog -Name 'acme' -BatchId '../x' -Number 4 } 'bad batch id rejected for logs'
+    $progress.state = 'failed'; $progress.failures = 1; $progress.finishedAt = '2026-11-24T20:30:00'
+    $m = Add-MachineReport $progress
+    Assert ($m.status -eq 'done') 'a PC that finished with a failed step counts as finished'
+
     Section 'Legacy migration'
     $legacyDir = Join-Path $Sandbox 'clients/oldco'
     New-Item -ItemType Directory -Path $legacyDir | Out-Null

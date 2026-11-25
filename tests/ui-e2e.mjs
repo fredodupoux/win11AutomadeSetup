@@ -84,6 +84,23 @@ try {
   await js(`(() => { const s = document.querySelector('[data-machine]'); s.value = 'used'; s.dispatchEvent(new Event('change')); })()`);
   ok(await waitFor(`!!document.querySelector('.machine.used')`), 'manual status saved');
 
+  // A PC reports its progress: plain-language tile, details window with steps + log
+  const report = (extra) => js(`fetch('/api/clients/beta').then(r => r.json()).then(d => fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ token: d.batches.batches[0].token, computerName: 'BETA-PC-02', ipAddress: '10.0.0.42', anydeskId: '987654321',
+      results: [{ step: 'WiFi', status: 'ok', detail: 'Internet connection available' }, { step: 'Custom script', status: 'fail', detail: 'exit code 1' }] }, ${JSON.stringify(extra)})) }).then(r => r.status))`);
+  ok(await report({ state: 'running', currentStep: 'Apps (winget)', stepIndex: 5, stepTotal: 19, stepStartedAt: new Date().toISOString(), log: 'Installing Google.Chrome...\nLOG-MARKER' }) === 200, 'progress report accepted');
+  await send('Page.navigate', { url: `${base}/#/client/beta/batches` });
+  ok(await waitFor(`[...document.querySelectorAll('.machine .state')].some(e => e.textContent.includes('Step 5 of 19: Apps (winget)'))`), 'tile shows the current step');
+  await click('[data-open-machine]');
+  ok(await waitFor(`!!document.querySelector('.modal .log') && document.querySelector('.modal .log').textContent.includes('LOG-MARKER')`), 'details window shows the PC log');
+  ok(await js(`document.querySelector('.modal').innerText.includes('10.0.0.42') && document.querySelector('.modal').innerText.includes('987654321') && document.querySelectorAll('.modal .steps-table tr').length === 3`), 'details window shows IP, AnyDesk ID and steps');
+  await click('#m-close');
+  ok(await waitFor(`!document.querySelector('.modal-back')`), 'details window closes');
+  ok(await report({ state: 'done', failures: 1, finishedAt: new Date().toISOString(), log: 'PROVISIONING FINISHED' }) === 200, 'final report accepted');
+  await send('Page.navigate', { url: `${base}/#/client/beta` });
+  await send('Page.navigate', { url: `${base}/#/client/beta/batches` });
+  ok(await waitFor(`!!document.querySelector('.machine.done-issues') && document.querySelector('.machine.done-issues').innerText.includes('Finished · 1 step failed')`), 'PC that finished with a failed step shows as finished, not failed');
+
   // "← Clients" goes back to the list
   await click('.page-head a[href="#/clients"]');
   ok(await waitFor(`location.hash === '#/clients' && document.querySelectorAll('tr[data-go]').length >= 1`), '"← Clients" returns to the list');

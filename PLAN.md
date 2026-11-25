@@ -120,6 +120,7 @@ needs go in an optional per-client script.
 | 🧪 | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json` |
 | 🧪 | F26 | PC IP address in reports | Reported from the first report (right after WiFi), shown on the batch tile, so a PC can be reached by IP during setup |
 | 🧪 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs: Setup now waits up to 10 minutes before warning |
+| 🧪 | F28 | PC status a tech can read: PC 6 showed "failed" although it finished (only the custom script failed) | A PC that reaches the end is now "Finished · N step(s) failed". Setup reports at the start of every step (step N of M, how long it's been running) with its setup log; tiles show the step, IP, AnyDesk ID and last report; **Details** opens every step's result, PC facts and the live log. Logs stored in `clients/<client>/reports/<batch>/<n>.log`. Needs one PC from a rebuilt ISO |
 | 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
 | ✅ | F18 | Media built before `2cdbc6f` | Old-format builds deleted (`dist/safitek/usb`, `dist/solima/usb`; the old ISO was already gone). Rebuild from the UI (2026-11-24) |
 

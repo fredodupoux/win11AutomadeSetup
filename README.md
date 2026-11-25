@@ -58,14 +58,19 @@ Clean install:  Windows installs from the answer file (autounattend.xml) → reb
 → Setup.ps1 (never prompts; each step runs on its own, failures don't stop the rest):
    System settings (name, timezone) → WiFi → wait for internet → report "started"
    → winget → Tailscale → apps (winget, direct installers, web-app shortcuts)
+   → AnyDesk unattended access (password, ID reported)
    → IT admin (enabled, visible) → end user (must change password)
    → security switches → Dell Command Update → Action1 → custom script
    → Windows Update (retries, never blocks) → auto sign-in OFF
-   → status file + report "done"/"failed"
+   → status file + final report (a failed step is listed; setup still finishes)
 → Provisioning ISO: answer files, secrets and C:\Setup removed → reboot to the sign-in screen
 ```
 
 On the PC: `C:\ProgramData\Provisioning\status.json` (result per step) and `C:\ProgramData\Provisioning\logs\setup_*.log`.
+
+**Following PCs from the UI** (UI started with `-Lan`, media built with "PCs report their progress"): each PC reports at every step.
+The batch tile shows the current step ("Step 7 of 19: Apps (winget) · running 3 min"), the PC's IP address and AnyDesk ID.
+**Details** opens every step's result, the PC's model/serial/MAC and its live setup log.
 
 ---
 
@@ -79,6 +84,7 @@ Each client is a folder in `clients/<name>/`. The UI edits these files. Everythi
 | `secrets.json` | Passwords and keys: IT admin, end user, WiFi, Tailscale auth key, Action1 agent URL |
 | `custom.ps1` | Optional extra steps (printers, drives…). Runs elevated on the PC near the end, with `$Client` and `$Secrets` |
 | `batches.json` | Batches of PCs, their report token, and what each PC reported |
+| `reports/<batch>/<n>.log` | The setup log each PC sent with its last report |
 
 **Feature switches** (`client.json` → `features`): `action1`, `tailscale`, `automaticUpdates`, `firewall`, `screenLockOnWake`, `remoteDesktop`, `disableSmb1`, `dellCommandUpdate` (Dell hardware only), `windowsUpdate`, `customScript`.
 

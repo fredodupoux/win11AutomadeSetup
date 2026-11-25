@@ -229,6 +229,10 @@ function Invoke-Api($Req) {
         return (Set-MachineStatus -Name $n -BatchId $bid -Number $num -Fields @{ status = [string]$b.status; note = [string]$b.note; source = 'manual' })
     }
 
+    if ($p -match '^/api/clients/([a-z0-9-]+)/batches/([A-Za-z0-9-]+)/machines/(\d+)/log$' -and $m -eq 'GET') {
+        return @{ log = (Get-MachineLog -Name $Matches[1] -BatchId $Matches[2] -Number ([int]$Matches[3])) }
+    }
+
     if ($p -eq '/api/winget/search' -and $m -eq 'GET') { return @{ results = @(Search-WingetCatalog -Query ([string]$Req.Query['q'])) } }
     if ($p -eq '/api/winget/check' -and $m -eq 'POST') { $b = Get-JsonBody $Req; return @{ results = @(Test-WingetIds -Ids @($b.ids)) } }
     if ($p -eq '/api/winget/refresh' -and $m -eq 'POST') { return (Update-WingetCatalog -Force) }
@@ -264,7 +268,8 @@ function Invoke-Request($Req, [bool]$FromLoopback) {
         if ($Req.Method -ne 'POST') { throw [HttpError]::new(405, 'POST only') }
         $b = Get-JsonBody $Req
         try { $m = Add-MachineReport $b } catch { throw [HttpError]::new(403, $_.Exception.Message) }
-        Write-Host "  report: $($b.computerName) -> $($m.status)" -ForegroundColor Green
+        $what = if ($m.status -eq 'done') { 'finished' } elseif ($b['currentStep']) { "step $($b['stepIndex'])/$($b['stepTotal']): $($b['currentStep'])" } else { 'started' }
+        Write-Host "  report: $($b.computerName) - $what" -ForegroundColor Green
         return @{ status = 200; body = (ConvertTo-JsonBytes @{ ok = $true }); type = $ContentTypes['.json'] }
     }
     if (-not $FromLoopback) { throw [HttpError]::new(403, 'Only available on this computer') }

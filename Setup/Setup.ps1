@@ -60,11 +60,22 @@ $Results = New-Object System.Collections.ArrayList
 $script:StepState = 'ok'
 $script:StepNotes = New-Object System.Collections.ArrayList
 
+# Step N of M, shown in the provisioning UI
+$script:StepIndex     = 0
+$script:StepTotal     = ([regex]::Matches((Get-Content -Path $PSCommandPath -Raw), "(?m)^Invoke-Step '")).Count
+$script:CurrentStep   = ''
+$script:StepStartedAt = ''
+$script:ReportsLive   = $false   # progress reports start once the PC is online
+
 function Invoke-Step([string]$Name, [scriptblock]$Action) {
     $script:StepState = 'ok'
     $script:StepNotes = New-Object System.Collections.ArrayList
+    $script:StepIndex++
+    $script:CurrentStep   = $Name
+    $script:StepStartedAt = (Get-Date).ToString('s')
     Write-Host ''
-    Write-Host "--- $Name ---" -ForegroundColor Cyan
+    Write-Host "--- [$($script:StepIndex)/$($script:StepTotal)] $Name ---" -ForegroundColor Cyan
+    if ($script:ReportsLive) { Send-Report 'running' -Quiet }
     try {
         & $Action
     } catch {
@@ -196,7 +207,18 @@ function Get-MachineFacts {
     }
 }
 
-function Send-Report([string]$State) {
+# The end of this PC's setup log (the transcript), sent with each report so a
+# tech can follow the PC from the provisioning UI.
+function Get-LogTail([int]$MaxChars = 200000) {
+    try {
+        $fs = New-Object System.IO.FileStream($LogFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try { $text = (New-Object System.IO.StreamReader($fs)).ReadToEnd() } finally { $fs.Dispose() }
+        if ($text.Length -gt $MaxChars) { $text = $text.Substring($text.Length - $MaxChars) }
+        return $text
+    } catch { return '' }
+}
+
+function Send-Report([string]$State, [switch]$Quiet) {
     if (-not $ReportUrl -or -not $ReportToken) { return }
     try {
         $facts = Get-MachineFacts
@@ -211,14 +233,19 @@ function Send-Report([string]$State) {
             ipAddress    = $facts.ipAddress
             anydeskId    = $script:AnyDeskId
             startedAt    = $StartedAt
-            finishedAt   = $(if ($State -ne 'started') { (Get-Date).ToString('s') } else { '' })
+            finishedAt   = $(if ($State -eq 'done') { (Get-Date).ToString('s') } else { '' })
+            currentStep  = $(if ($State -eq 'done') { '' } else { $script:CurrentStep })
+            stepIndex    = $script:StepIndex
+            stepTotal    = $script:StepTotal
+            stepStartedAt = $script:StepStartedAt
             warnings     = @($Results | Where-Object { $_.status -eq 'warn' }).Count
             failures     = @($Results | Where-Object { $_.status -eq 'fail' }).Count
             results      = @($Results)
+            log          = (Get-LogTail)
         } | ConvertTo-Json -Depth 6
         Invoke-RestMethod -Uri $ReportUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) `
             -ContentType 'application/json; charset=utf-8' -TimeoutSec 10 | Out-Null
-        Write-Host "[OK] Reported '$State' to $ReportUrl"
+        if (-not $Quiet) { Write-Host "[OK] Reported '$State' to $ReportUrl" }
     } catch {
         Write-Host "Report to $ReportUrl not delivered: $($_.Exception.Message)"
     }
@@ -298,6 +325,7 @@ Invoke-Step 'WiFi' {
 }
 
 Send-Report 'started'
+$script:ReportsLive = $true
 
 Invoke-Step 'Package manager (winget)' {
     if (-not (Wait-Winget)) { throw "winget not available after 10 minutes - install 'App Installer' and re-run" }
@@ -423,8 +451,6 @@ Invoke-Step 'AnyDesk unattended access' {
     }
 }
 
-# Second progress report: the batch tile shows the AnyDesk ID and IP while updates run
-Send-Report 'started'
 
 Invoke-Step 'IT admin account' {
     $user = [string](Get-Cfg $Client 'itAdmin.username' '')
@@ -613,11 +639,12 @@ Invoke-Step 'Auto sign-in off' {
 
 $failures = @($Results | Where-Object { $_.status -eq 'fail' })
 $warnings = @($Results | Where-Object { $_.status -eq 'warn' })
-$state = if ($failures.Count -gt 0) { 'failed' } else { 'done' }
+# Setup always runs to the end: a failed step is reported, it doesn't stop the PC
+$state = 'done'
 
 Write-Host ''
 Write-Host '============================================'
-Write-Host "  PROVISIONING $($state.ToUpper())  ($($failures.Count) failed, $($warnings.Count) with warnings)"
+Write-Host "  PROVISIONING FINISHED  ($($failures.Count) step(s) failed, $($warnings.Count) with warnings)"
 Write-Host '============================================'
 foreach ($r in $Results) {
     $color = switch ($r.status) { 'ok' { 'Green' } 'warn' { 'Yellow' } 'fail' { 'Red' } default { 'Gray' } }
@@ -636,6 +663,8 @@ $facts = Get-MachineFacts
     batch        = [string](Get-Cfg $Client 'build.batchName' '')
     startedAt    = $StartedAt
     finishedAt   = (Get-Date).ToString('s')
+    failures     = $failures.Count
+    warnings     = $warnings.Count
     serial       = $facts.serial
     model        = $facts.model
     ipAddress    = $facts.ipAddress

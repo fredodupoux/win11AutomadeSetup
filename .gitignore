@@ -18,3 +18,4 @@ Desktop.ini
 .vscode/
 Provisionning_Guide.md
 cache/
+.claude/settings.local.json

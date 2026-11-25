@@ -502,12 +502,35 @@ function Add-MachineReport($Report) {
     $number = Get-ComputerNumber $pattern ([string]$Report.computerName)
     if ($null -eq $number) { throw "Computer name '$($Report.computerName)' does not match pattern '$pattern'" }
     $fields = @{}
-    foreach ($k in 'state', 'computerName', 'serial', 'manufacturer', 'model', 'mac', 'startedAt', 'finishedAt', 'warnings', 'failures', 'results', 'anydeskId', 'ipAddress') {
+    foreach ($k in 'state', 'computerName', 'serial', 'manufacturer', 'model', 'mac', 'startedAt', 'finishedAt', 'warnings', 'failures', 'results',
+                   'anydeskId', 'ipAddress', 'currentStep', 'stepIndex', 'stepTotal', 'stepStartedAt') {
         if ($Report.Contains($k)) { $fields[$k] = $Report[$k] }
     }
-    $fields.status = switch ([string]$Report.state) { 'started' { 'in-progress' } 'done' { 'done' } 'failed' { 'failed' } default { 'in-progress' } }
+    # Setup always runs to the end; a failed step shows in 'failures', not as a failed PC.
+    # ('failed' is what older Setup.ps1 versions sent when a step had failed.)
+    $fields.status = switch ([string]$Report.state) { 'done' { 'done' } 'failed' { 'done' } default { 'in-progress' } }
     $fields.source = 'report'
+    $fields.lastReport = (Get-Date).ToString('s')
+    # The PC's setup log goes to its own file, not into batches.json
+    if ($Report.Contains('log') -and $Report.log) {
+        $logDir = Get-MachineLogDir $hit.client $hit.batch.id
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $logDir "$number.log"), [string]$Report.log, [System.Text.UTF8Encoding]::new($false))
+        $fields.hasLog = $true
+    }
     return (Set-MachineStatus -Name $hit.client -BatchId $hit.batch.id -Number $number -Fields $fields)
+}
+
+function Get-MachineLogDir([string]$Name, [string]$BatchId) {
+    if ($BatchId -cnotmatch '^[A-Za-z0-9-]+$') { throw "Bad batch id '$BatchId'" }
+    return (Join-Path (Get-ClientDir $Name) "reports/$BatchId")
+}
+
+# The setup log a PC sent with its last report ('' if none)
+function Get-MachineLog([string]$Name, [string]$BatchId, [int]$Number) {
+    $file = Join-Path (Get-MachineLogDir $Name $BatchId) "$Number.log"
+    if (Test-Path $file) { return [System.IO.File]::ReadAllText($file) }
+    return ''
 }
 
 # ====================================================================
@@ -1147,7 +1170,7 @@ Export-ModuleMember -Function @(
     'Get-ProvPaths', 'Get-DefaultClient', 'Get-DefaultSecrets', 'Get-ProvMeta',
     'Format-ComputerName', 'Get-ComputerNumber', 'Test-ComputerName',
     'Test-ClientData', 'Get-ClientList', 'Get-ClientData', 'Save-ClientData', 'New-ClientFromTemplate',
-    'Get-Batch', 'Save-Batch', 'Set-MachineStatus', 'Add-MachineReport', 'Find-BatchByToken',
+    'Get-Batch', 'Save-Batch', 'Set-MachineStatus', 'Add-MachineReport', 'Find-BatchByToken', 'Get-MachineLog',
     'Resolve-BuildConfig', 'New-SetupFolder', 'New-AutounattendXml', 'New-IsoImage', 'Get-IsoTool', 'Find-Oscdimg',
     'Invoke-ProvisionBuild', 'Invoke-UsbBuild', 'Invoke-CleanIsoBuild', 'Invoke-ProvBuild',
     'Update-WingetCatalog', 'Get-WingetCatalogInfo', 'Search-WingetCatalog', 'Test-WingetIds',

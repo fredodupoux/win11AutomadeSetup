@@ -100,6 +100,7 @@ window.addEventListener('beforeunload', (e) => {
 
 async function route() {
   clearTimers();
+  closeMachine();
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const page = parts[0] || 'clients';
   $$('.topbar nav a').forEach((a) => a.classList.toggle('active', a.dataset.nav === (page === 'client' ? 'clients' : page)));
@@ -554,6 +555,44 @@ function setupWingetSearch() {
 
 const STATUSES = [['', 'not used yet'], ['used', 'used (by hand)'], ['in-progress', 'in progress'], ['done', 'done'], ['failed', 'failed'], ['skipped', 'skipped']];
 
+function minutesSince(iso) {
+  const t = new Date(iso).getTime();
+  return isNaN(t) ? null : Math.max(0, Math.round((Date.now() - t) / 60000));
+}
+function ago(iso) {
+  const m = minutesSince(iso);
+  if (m === null) return '';
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  return `${Math.floor(m / 60)} h ${m % 60} min ago`;
+}
+
+// What a tech should read on a PC tile: a CSS class + one plain-language line
+function machineView(m) {
+  const reported = m.source === 'report';
+  const fails = Number(m.failures || 0), warns = Number(m.warnings || 0);
+  if (reported && (m.finishedAt || m.status === 'done' || m.status === 'failed')) {
+    if (fails) return { cls: 'done-issues', line: `Finished · ${fails} step${fails > 1 ? 's' : ''} failed`, done: true };
+    if (warns) return { cls: 'done', line: `Finished · ${warns} warning${warns > 1 ? 's' : ''}`, done: true };
+    return { cls: 'done', line: 'Finished', done: true };
+  }
+  if (reported && m.status === 'in-progress') {
+    const heard = m.lastReport || m.updated;
+    const quiet = minutesSince(heard);
+    let line = m.currentStep ? `Step ${m.stepIndex} of ${m.stepTotal}: ${m.currentStep}` : 'Setup started';
+    if (m.stepStartedAt && m.currentStep) {
+      const run = minutesSince(m.stepStartedAt);
+      if (run !== null && run >= 1) line += ` · running ${run} min`;
+    }
+    // Windows Update can be quiet for a long time; anything else quiet for 30 min is worth a look
+    const stale = quiet !== null && quiet >= 30 && m.currentStep !== 'Windows Update';
+    return { cls: stale ? 'stale' : 'in-progress', line: stale ? `${line} · no news for ${quiet} min` : line };
+  }
+  if (!m.status) return { cls: '', line: 'Not used yet' };
+  const label = (STATUSES.find(([v]) => v === m.status) || ['', m.status])[1];
+  return { cls: m.status, line: m.status === 'used' ? 'Used (set by hand)' : `${label[0].toUpperCase()}${label.slice(1)} (set by hand)` };
+}
+
 async function refreshBatches() {
   const d = await api('GET', `/api/clients/${state.editor.name}`);
   state.editor.batches = d.batches.batches || [];
@@ -568,19 +607,27 @@ function renderBatches(editId = null) {
   const cards = ed.batches.slice().reverse().map((b) => {
     const pattern = b.computerNamePattern || ed.client.computerNamePattern;
     const machines = b.machines || {};
-    const tally = { done: 0, failed: 0, 'in-progress': 0, used: 0 };
+    const tally = { done: 0, issues: 0, running: 0, used: 0 };
     const tiles = [];
     for (let n = b.start; n <= b.end; n++) {
       const m = machines[String(n)] || {};
       const st = m.status || '';
-      if (tally[st] !== undefined) tally[st]++;
-      const detail = [m.model, m.serial && `S/N ${m.serial}`, m.failures ? `${m.failures} failed step(s)` : '', m.warnings ? `${m.warnings} warning(s)` : '', m.updated && when(m.updated)].filter(Boolean).join(' · ');
-      tiles.push(`<div class="machine ${esc(st)}" title="${esc(detail)}">
+      const v = machineView(m);
+      if (v.done) { tally.done++; if (v.cls === 'done-issues') tally.issues++; }
+      else if (st === 'in-progress') tally.running++;
+      else if (st === 'done') tally.done++;
+      else if (st === 'used') tally.used++;
+      const reported = m.source === 'report';
+      tiles.push(`<div class="machine ${esc(v.cls)}">
         <div class="name">${esc(formatName(pattern, n))}</div>
-        <div class="muted">#${n}${m.source === 'report' ? ' · reported' : ''}</div>
+        <div class="state">${esc(v.line)}</div>
         ${m.ipAddress ? `<div class="mono copy" title="IP address">IP ${esc(m.ipAddress)}</div>` : ''}
         ${m.anydeskId ? `<div class="mono copy" title="AnyDesk ID">AnyDesk ${esc(m.anydeskId)}</div>` : ''}
-        <select data-machine="${esc(b.id)}:${n}">${STATUSES.map(([v, t]) => `<option value="${v}" ${v === st ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        ${reported ? `<div class="muted">last report ${esc(ago(m.lastReport || m.updated))}</div>` : ''}
+        <div class="tile-actions">
+          ${reported ? `<button class="small" data-open-machine="${esc(b.id)}:${n}">Details</button>` : ''}
+          <select data-machine="${esc(b.id)}:${n}" title="Set the status by hand">${STATUSES.map(([val, t]) => `<option value="${val}" ${val === (v.done ? 'done' : st) ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        </div>
       </div>`);
     }
     const o = b.overrides || {};
@@ -589,8 +636,8 @@ function renderBatches(editId = null) {
       <div class="row"><div><h2 style="margin:0">${esc(b.name)}</h2>
         <div class="muted"><span class="mono">${esc(formatName(pattern, b.start))} → ${esc(formatName(pattern, b.end))}</span> · created ${esc(when(b.created))}${ov ? ` · overrides: ${esc(ov)}` : ''}</div></div>
         <span class="spacer"></span>
-        <span class="badge ok">${tally.done} done</span><span class="badge info">${tally['in-progress']} in progress</span>
-        <span class="badge bad">${tally.failed} failed</span><span class="badge warn">${tally.used} used</span>
+        <span class="badge ok">${tally.done} finished</span><span class="badge info">${tally.running} in progress</span>
+        ${tally.issues ? `<span class="badge warn">${tally.issues} with a failed step</span>` : ''}<span class="badge">${tally.used} used</span>
         <button class="small" data-edit-batch="${esc(b.id)}">Edit</button>
         <button class="small primary" data-build-batch="${esc(b.id)}">Build media</button>
       </div>
@@ -611,6 +658,10 @@ function renderBatches(editId = null) {
   $('#new-batch').onclick = () => renderBatches('new');
   $$('[data-edit-batch]').forEach((b) => b.onclick = () => renderBatches(b.dataset.editBatch));
   $$('[data-build-batch]').forEach((b) => b.onclick = () => { state.build.client = ed.name; state.build.batch = b.dataset.buildBatch; location.hash = '#/build'; });
+  $$('[data-open-machine]').forEach((btn) => btn.onclick = () => {
+    const [bid, n] = btn.dataset.openMachine.split(':');
+    openMachine(bid, Number(n));
+  });
   $$('[data-machine]').forEach((s) => s.onchange = async () => {
     const [bid, n] = s.dataset.machine.split(':');
     try {
@@ -628,6 +679,76 @@ function renderBatches(editId = null) {
       try { await refreshBatches(); renderBatches(); } catch { /* keep last view */ }
     }, 8000));
   }
+}
+
+// ---------- one PC: steps + log ----------
+
+const STEP_ICON = { ok: '✓', warn: '!', fail: '✗', skip: '–' };
+const STEP_WORD = { ok: 'OK', warn: 'Warning', fail: 'Failed', skip: 'Skipped' };
+const shorten = (t) => (t.length > 400 ? `${t.slice(0, 400).trimEnd()}… (full text in the setup log below)` : t);
+
+function closeMachine() {
+  clearInterval(state.machineTimer);
+  state.machineTimer = null;
+  document.querySelector('.modal-back')?.remove();
+  document.removeEventListener('keydown', machineKeys);
+}
+function machineKeys(e) { if (e.key === 'Escape') closeMachine(); }
+
+async function openMachine(batchId, n) {
+  closeMachine();
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="muted">Loading…</div></div>';
+  back.addEventListener('click', (e) => { if (e.target === back) closeMachine(); });
+  document.body.appendChild(back);
+  document.addEventListener('keydown', machineKeys);
+  let follow = true;   // keep the log scrolled to the end unless the tech scrolled up
+
+  const draw = async () => {
+    const ed = state.editor;
+    let m, log = '', pattern = ed.client.computerNamePattern;
+    try {
+      await refreshBatches();
+      const b = ed.batches.find((x) => x.id === batchId);
+      m = (b && b.machines && b.machines[String(n)]) || {};
+      if (b && b.computerNamePattern) pattern = b.computerNamePattern;
+      if (m.hasLog) log = (await api('GET', `/api/clients/${ed.name}/batches/${batchId}/machines/${n}/log`)).log || '';
+    } catch (err) { toast(err.message, true); return; }
+    if (!document.body.contains(back)) return;   // closed while loading
+    const v = machineView(m);
+    const fact = (label, value, copy = false) => value ? `<div><span class="muted">${label}</span><br><span class="${copy ? 'mono copy' : ''}">${esc(value)}</span></div>` : '';
+    const results = Array.isArray(m.results) ? m.results : [];
+    const rows = results.map((r) => `<tr class="step-${esc(r.status)}">
+        <td class="icon">${STEP_ICON[r.status] || ''}</td><td>${esc(r.step)}</td><td>${esc(STEP_WORD[r.status] || r.status)}</td>
+        <td class="detail">${esc(shorten(r.detail || ''))}</td></tr>`).join('');
+    const running = !v.done && m.currentStep ? `<tr class="step-running"><td class="icon">…</td><td>${esc(m.currentStep)}</td><td>Running</td>
+        <td class="detail">started ${esc(ago(m.stepStartedAt))}</td></tr>` : '';
+    const modal = back.querySelector('.modal');
+    const oldLog = modal.querySelector('.log');
+    if (oldLog) follow = oldLog.scrollTop + oldLog.clientHeight >= oldLog.scrollHeight - 30;
+    modal.innerHTML = `
+      <div class="row"><h2 style="margin:0">${esc(m.computerName || formatName(pattern, n))}</h2>
+        <span class="machine-state ${esc(v.cls)}">${esc(v.line)}</span><span class="spacer"></span>
+        <button class="small" id="m-close">Close</button></div>
+      <div class="facts">
+        ${fact('IP address', m.ipAddress, true)}${fact('AnyDesk ID', m.anydeskId, true)}
+        ${fact('Started', when(m.startedAt))}${fact('Finished', when(m.finishedAt))}
+        ${fact('Last report', m.lastReport || m.updated ? `${when(m.lastReport || m.updated)} (${ago(m.lastReport || m.updated)})` : '')}
+        ${fact('Model', [m.manufacturer, m.model].filter(Boolean).join(' '))}${fact('Serial number', m.serial, true)}${fact('MAC address', (m.mac || '').split(';').join('\n'), true)}
+      </div>
+      ${v.done ? '<p class="muted">Setup is finished. The PC restarts on its own and is ready for the user. Failed steps can be fixed by hand or with the backup menu (Launch-Setup.cmd).</p>' : ''}
+      <h3>Steps</h3>
+      ${rows || running ? `<table class="steps-table"><tbody>${rows}${running}</tbody></table>` : '<p class="muted">No steps reported yet.</p>'}
+      <h3>Setup log <span class="muted">(last part of C:\\ProgramData\\Provisioning\\logs on the PC)</span></h3>
+      ${log ? `<pre class="log tall">${esc(log)}</pre>` : '<p class="muted">No log received yet. PCs set up with media built before this version do not send their log.</p>'}`;
+    modal.querySelector('#m-close').onclick = closeMachine;
+    const pre = modal.querySelector('.log');
+    if (pre && follow) pre.scrollTop = pre.scrollHeight;
+    if (v.done) { clearInterval(state.machineTimer); state.machineTimer = null; }
+  };
+  await draw();
+  if (document.querySelector('.modal-back')) state.machineTimer = setInterval(draw, 8000);
 }
 
 function batchForm(b) {
