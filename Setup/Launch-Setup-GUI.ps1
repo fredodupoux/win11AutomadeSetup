@@ -49,7 +49,9 @@ $Fields = @(
     @{ Num = 13; Section = '';             Label = 'WiFi password';        Doc = 'secrets'; Path = 'wifiPassword';          Type = 'secret' }
     @{ Num = 14; Section = 'MANAGEMENT';   Label = 'Action1 agent';        Doc = 'client';  Path = 'features.action1';      Type = 'bool' }
     @{ Num = 15; Section = '';             Label = 'Action1 agent URL';    Doc = 'secrets'; Path = 'action1AgentUrl';       Type = 'secret' }
-    @{ Num = 16; Section = '';             Label = 'Windows Update';       Doc = 'client';  Path = 'features.windowsUpdate'; Type = 'bool' }
+    @{ Num = 16; Section = '';             Label = 'AnyDesk unattended';   Doc = 'client';  Path = 'features.anydesk';      Type = 'bool' }
+    @{ Num = 17; Section = '';             Label = 'AnyDesk password';     Doc = 'secrets'; Path = 'anydeskPassword';       Type = 'secret' }
+    @{ Num = 18; Section = '';             Label = 'Windows Update';       Doc = 'client';  Path = 'features.windowsUpdate'; Type = 'bool' }
 )
 
 function Get-Value($Field) {

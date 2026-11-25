@@ -107,6 +107,7 @@ function Get-DefaultClient {
         apps                = [ordered]@{ winget = @(); installers = @(); webApps = @() }
         features            = [ordered]@{
             action1           = $false
+            anydesk           = $false
             tailscale         = $false
             automaticUpdates  = $true
             firewall          = $true
@@ -128,6 +129,7 @@ function Get-DefaultSecrets {
         wifiPassword     = ''
         tailscaleAuthKey = ''
         action1AgentUrl  = ''
+        anydeskPassword  = ''
     }
 }
 
@@ -141,6 +143,7 @@ function Get-ProvMeta {
         windowsEditions = $script:WindowsEditions
         features        = [ordered]@{
             action1           = 'Install the Action1 agent (needs the agent URL in secrets)'
+            anydesk           = 'Set the AnyDesk unattended-access password and report each PC''s AnyDesk ID'
             tailscale         = 'Install Tailscale and join the tailnet (needs an auth key)'
             automaticUpdates  = 'Windows Update policy: download and install automatically'
             firewall          = 'Turn the firewall on for all profiles'
@@ -258,6 +261,13 @@ function Test-ClientData {
     # Remote management
     if ($c.features.action1) {
         if ([string]$s.action1AgentUrl -notmatch '^https://\S+$') { E 'secrets.action1AgentUrl' 'Action1 is on but the agent URL is missing or not https://' }
+    }
+    if ($c.features.anydesk) {
+        $pw = [string]$s.anydeskPassword
+        if ($pw.Length -lt 8) { E 'secrets.anydeskPassword' 'AnyDesk unattended access is on but the password is missing or shorter than 8 characters' }
+        elseif ($pw -notmatch '^[\x21-\x7E]+$') { E 'secrets.anydeskPassword' 'AnyDesk password: use letters, numbers and symbols only (no spaces or accents)' }
+        $hasAnyDesk = (@($c.apps.winget) -contains 'AnyDesk.AnyDesk') -or @(@($c.apps.installers) | Where-Object { $_ -and [string]$_['name'] -match 'anydesk' }).Count -gt 0
+        if (-not $hasAnyDesk) { W 'secrets.anydeskPassword' 'AnyDesk unattended access is on but AnyDesk is not in the app list (add AnyDesk.AnyDesk from winget)' }
     }
     if ($c.features.tailscale) {
         if ([string]$s.tailscaleAuthKey -notmatch '^tskey-') { E 'secrets.tailscaleAuthKey' 'Tailscale is on but the auth key is missing (starts with tskey-)' }
@@ -492,7 +502,7 @@ function Add-MachineReport($Report) {
     $number = Get-ComputerNumber $pattern ([string]$Report.computerName)
     if ($null -eq $number) { throw "Computer name '$($Report.computerName)' does not match pattern '$pattern'" }
     $fields = @{}
-    foreach ($k in 'state', 'computerName', 'serial', 'manufacturer', 'model', 'mac', 'startedAt', 'finishedAt', 'warnings', 'failures', 'results') {
+    foreach ($k in 'state', 'computerName', 'serial', 'manufacturer', 'model', 'mac', 'startedAt', 'finishedAt', 'warnings', 'failures', 'results', 'anydeskId', 'ipAddress') {
         if ($Report.Contains($k)) { $fields[$k] = $Report[$k] }
     }
     $fields.status = switch ([string]$Report.state) { 'started' { 'in-progress' } 'done' { 'done' } 'failed' { 'failed' } default { 'in-progress' } }

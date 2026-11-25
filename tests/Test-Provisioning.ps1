@@ -83,6 +83,20 @@ try {
     Assert (@(@($v.errors) | Where-Object { $_.field -eq 'apps.winget' }).Count -eq 1) 'bad winget id is an error'
     Assert (@(@($v.errors) | Where-Object { $_.field -eq 'locale.input' }).Count -eq 1) 'bad locale is an error'
 
+    $ad = Copy-Deep $acme.client
+    $ad.features.anydesk = $true
+    $ad.apps.winget = @('Google.Chrome')
+    $adSecrets = Copy-Deep $secrets
+    $v = Test-ClientData -Client $ad -Secrets $adSecrets
+    Assert (@(@($v.errors) | Where-Object { $_.field -eq 'secrets.anydeskPassword' }).Count -eq 1) 'AnyDesk on without a password is an error'
+    $adSecrets.anydeskPassword = 'Remote-2026!'
+    $v = Test-ClientData -Client $ad -Secrets $adSecrets
+    Assert (@(@($v.errors) | Where-Object { $_.field -eq 'secrets.anydeskPassword' }).Count -eq 0) 'AnyDesk password accepted'
+    Assert (@(@($v.warnings) | Where-Object { $_.field -eq 'secrets.anydeskPassword' }).Count -eq 1) 'AnyDesk on but not in the app list is a warning'
+    $adSecrets.anydeskPassword = 'has space 1'
+    $v = Test-ClientData -Client $ad -Secrets $adSecrets
+    Assert (@(@($v.errors) | Where-Object { $_.field -eq 'secrets.anydeskPassword' }).Count -eq 1) 'AnyDesk password with a space is an error'
+
     $copy = New-ClientFromTemplate -Name 'acme2' -From 'acme'
     Assert ($copy.client.computerNamePattern -eq 'ACME-PC-##') 'copy keeps settings'
     Assert (-not $copy.secrets.itAdminPassword) 'copy does not copy passwords'
@@ -138,8 +152,10 @@ try {
 
     Section 'Reports'
     $report = [ordered]@{ token = $batch.token; state = 'done'; computerName = 'ACME-PC-05'; serial = 'SN1'; model = 'M1'; warnings = 1; failures = 0; results = @() }
+    $report.anydeskId = '123456789'; $report.ipAddress = '10.16.20.41'
     $m = Add-MachineReport $report
     Assert ($m.status -eq 'done' -and $m.number -eq 5) 'report marks PC 5 done'
+    Assert ($m.anydeskId -eq '123456789' -and $m.ipAddress -eq '10.16.20.41') 'report keeps the AnyDesk ID and IP address'
     $report.token = 'wrong'
     Assert-Throws { Add-MachineReport $report } 'wrong token rejected'
     $report.token = $batch.token; $report.computerName = 'OTHER-01'

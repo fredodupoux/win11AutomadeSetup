@@ -164,6 +164,7 @@ $ReportUrl   = [string](Get-Cfg $Client 'build.report.url' '')
 $ReportToken = [string](Get-Cfg $Client 'build.report.token' '')
 $script:RebootRequired = $false
 $script:WingetReady    = $false
+$script:AnyDeskId      = ''
 
 Write-Host '============================================'
 Write-Host "  Windows 11 provisioning - $Org"
@@ -180,11 +181,18 @@ function Get-MachineFacts {
     $bios = Get-CimInstance Win32_BIOS -ErrorAction SilentlyContinue
     $cs   = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
     $mac  = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { $_.MacAddress } | Where-Object { $_ } | Sort-Object) -join ';'
+    # IPv4 of the connected adapters (the ones with a default gateway first), to reach the PC by IP
+    $ip = @(Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+            Where-Object { $_.NetAdapter.Status -eq 'Up' -and $_.IPv4Address } |
+            Sort-Object { -not $_.IPv4DefaultGateway } |
+            ForEach-Object { $_.IPv4Address } | ForEach-Object { $_.IPAddress } |
+            Where-Object { $_ -and $_ -notlike '169.254.*' -and $_ -ne '127.0.0.1' } | Select-Object -Unique) -join ', '
     return @{
         serial       = $(if ($bios) { [string]$bios.SerialNumber } else { '' })
         manufacturer = $(if ($cs) { [string]$cs.Manufacturer } else { '' })
         model        = $(if ($cs) { [string]$cs.Model } else { '' })
         mac          = $mac
+        ipAddress    = $ip
     }
 }
 
@@ -200,6 +208,8 @@ function Send-Report([string]$State) {
             manufacturer = $facts.manufacturer
             model        = $facts.model
             mac          = $facts.mac
+            ipAddress    = $facts.ipAddress
+            anydeskId    = $script:AnyDeskId
             startedAt    = $StartedAt
             finishedAt   = $(if ($State -ne 'started') { (Get-Date).ToString('s') } else { '' })
             warnings     = @($Results | Where-Object { $_.status -eq 'warn' }).Count
@@ -383,6 +393,38 @@ Invoke-Step 'Web app shortcuts' {
     }
 }
 
+Invoke-Step 'AnyDesk unattended access' {
+    if (-not (Test-Feature 'anydesk')) { Skip-Step 'turned off for this client'; return }
+    $pw = [string](Get-Cfg $Secrets 'anydeskPassword' '')
+    if (-not $pw) { throw 'no AnyDesk password in secrets.json' }
+    $exe = @("${env:ProgramFiles(x86)}\AnyDesk\AnyDesk.exe", "$env:ProgramFiles\AnyDesk\AnyDesk.exe") +
+           @(Get-ChildItem -Path "${env:ProgramFiles(x86)}\AnyDesk-*\AnyDesk-*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) |
+           Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $exe) { throw 'AnyDesk is not installed (add AnyDesk.AnyDesk to the winget apps)' }
+    # AnyDesk reads the password from standard input. Capturing the output makes
+    # PowerShell wait for AnyDesk (a GUI program) to finish.
+    $out = ($pw | & $exe --set-password 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "AnyDesk --set-password failed (exit code $LASTEXITCODE) $out" }
+    Ok-Step 'unattended-access password set'
+    # The ID is only known once AnyDesk has reached its servers: retry for up to 2 minutes.
+    $deadline = (Get-Date).AddMinutes(2)
+    do {
+        $id = (& $exe --get-id 2>&1 | Out-String).Trim()
+        if ($id -match '^\d{6,}$') { break }
+        $id = ''
+        Start-Sleep -Seconds 10
+    } while ((Get-Date) -lt $deadline)
+    if ($id) {
+        $script:AnyDeskId = $id
+        Ok-Step "AnyDesk ID $id"
+    } else {
+        Warn-Step 'AnyDesk ID not available yet (AnyDesk not online) - read it on the PC'
+    }
+}
+
+# Second progress report: the batch tile shows the AnyDesk ID and IP while updates run
+Send-Report 'started'
+
 Invoke-Step 'IT admin account' {
     $user = [string](Get-Cfg $Client 'itAdmin.username' '')
     if (-not $user) { Skip-Step 'no IT admin configured'; return }
@@ -476,9 +518,23 @@ Invoke-Step 'Custom script' {
     $custom = Join-Path $Here 'custom.ps1'
     if (-not (Test-Feature 'customScript')) { Skip-Step 'turned off for this client'; return }
     if (-not (Test-Path $custom)) { Skip-Step 'no custom.ps1'; return }
-    # The custom script gets the settings and secrets; anything it throws marks this step failed.
-    & $custom -Client $Client -Secrets $Secrets
-    Ok-Step 'custom.ps1 finished'
+    $text = Get-Content -Path $custom -Raw -Encoding UTF8
+    $firstLine = @($text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if ($firstLine -and $firstLine[0] -match '^\s*(@?echo\s+off|@?rem(\s|$)|::|setlocal)') {
+        # A Command Prompt (batch) script pasted into the custom script box: run it with cmd.exe.
+        # cmd needs Windows line endings; run attached to this window (exit code != 0 = failed).
+        $cmdFile = Join-Path $env:TEMP 'provisioning-custom.cmd'
+        [System.IO.File]::WriteAllText($cmdFile, (($text -replace "`r`n", "`n") -replace "`n", "`r`n"), (New-Object System.Text.UTF8Encoding $false))
+        try {
+            $p = Start-Process -FilePath "$env:WINDIR\System32\cmd.exe" -ArgumentList "/d /c `"`"$cmdFile`"`"" -NoNewWindow -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "custom script (batch) exit code $($p.ExitCode)" }
+        } finally { Remove-Item $cmdFile -Force -ErrorAction SilentlyContinue }
+        Ok-Step 'custom script (batch) finished'
+    } else {
+        # PowerShell: gets the settings and secrets; anything it throws marks this step failed.
+        & $custom -Client $Client -Secrets $Secrets
+        Ok-Step 'custom.ps1 finished'
+    }
 }
 
 Invoke-Step 'Next computer name on the USB' {
@@ -581,6 +637,8 @@ $facts = Get-MachineFacts
     finishedAt   = (Get-Date).ToString('s')
     serial       = $facts.serial
     model        = $facts.model
+    ipAddress    = $facts.ipAddress
+    anydeskId    = $script:AnyDeskId
     results      = @($Results)
     log          = $LogFile
 } | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $ProvDir 'status.json') -Encoding UTF8

@@ -303,6 +303,8 @@ function renderSettings() {
         <section class="panel" id="sec-remote"><h2>Remote management</h2>
           ${toggle('client.features.action1', 'Action1 agent', meta.features.action1)}
           ${field({ label: 'Action1 agent URL', path: 'secrets.action1AgentUrl', type: 'password', hint: 'Action1 console → Endpoints → Deploy agent → copy the MSI link' })}
+          ${toggle('client.features.anydesk', 'AnyDesk unattended access', meta.features.anydesk)}
+          ${field({ label: 'AnyDesk unattended-access password', path: 'secrets.anydeskPassword', type: 'password', hint: 'At least 8 characters, no spaces. Same password on every PC of this client; each PC\'s AnyDesk ID shows on the Batches screen' })}
           ${toggle('client.features.tailscale', 'Tailscale', meta.features.tailscale)}
           ${field({ label: 'Tailscale auth key', path: 'secrets.tailscaleAuthKey', type: 'password', hint: 'Reusable, pre-approved key from the Tailscale admin console' })}
         </section>
@@ -329,7 +331,7 @@ function renderSettings() {
 
         <section class="panel" id="sec-custom"><h2>Custom script</h2>
           ${toggle('client.features.customScript', 'Run a custom script', meta.features.customScript)}
-          <p class="muted">PowerShell 5.1, runs elevated on the PC near the end of setup. <code>$Client</code> and <code>$Secrets</code> are available. A failure is reported but setup continues.</p>
+          <p class="muted">PowerShell 5.1, runs elevated on the PC near the end of setup. <code>$Client</code> and <code>$Secrets</code> are available. A Command Prompt (batch) script also works: start it with <code>@echo off</code>. A failure is reported but setup continues.</p>
           <textarea data-path="customScript" spellcheck="false" placeholder="param($Client, $Secrets)&#10;# e.g. Add-Printer -ConnectionName '\\\\printserver\\Reception'">${esc(ed.customScript)}</textarea>
           <span class="field-msg" data-msg="customScript"></span>
         </section>
@@ -408,7 +410,7 @@ function showValidation(v) {
     if (/^(organization|computerNamePattern|timezone|windowsEdition|locale)/.test(f)) return 'company';
     if (/^(itAdmin|endUser|itAdminPassword|endUserPassword)/.test(f)) return 'accounts';
     if (/^(wifi)/.test(f)) return 'network';
-    if (/^(action1|tailscale)/.test(f)) return 'remote';
+    if (/^(action1|anydesk|tailscale)/.test(f)) return 'remote';
     if (/^apps/.test(f)) return 'apps';
     if (/^customScript/.test(f)) return 'custom';
     return 'features';
@@ -576,6 +578,8 @@ function renderBatches(editId = null) {
       tiles.push(`<div class="machine ${esc(st)}" title="${esc(detail)}">
         <div class="name">${esc(formatName(pattern, n))}</div>
         <div class="muted">#${n}${m.source === 'report' ? ' · reported' : ''}</div>
+        ${m.ipAddress ? `<div class="mono copy" title="IP address">IP ${esc(m.ipAddress)}</div>` : ''}
+        ${m.anydeskId ? `<div class="mono copy" title="AnyDesk ID">AnyDesk ${esc(m.anydeskId)}</div>` : ''}
         <select data-machine="${esc(b.id)}:${n}">${STATUSES.map(([v, t]) => `<option value="${v}" ${v === st ? 'selected' : ''}>${t}</option>`).join('')}</select>
       </div>`);
     }

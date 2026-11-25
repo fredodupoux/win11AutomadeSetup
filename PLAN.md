@@ -86,6 +86,7 @@ needs go in an optional per-client script.
 |---|---|---|---|
 | 🧪 | 4.1 | PCs report back | `status.json` on the PC + POST to the UI with `-Lan` (F17) |
 | 🧪 | 4.2 | Locale/keyboard per client | Answer files use the client's language/keyboard |
+| 🧪 | 4.4 | AnyDesk unattended access | Password from secrets, AnyDesk ID + IP address on the batch tiles (F25, F26) |
 | 🧪 | 4.3 | WPA3 WiFi | WPA3-Personal, open, hidden: done. Enterprise 802.1X: ❌ dropped (needs per-user credentials; revisit if a client needs it) |
 
 ---
@@ -95,8 +96,8 @@ needs go in an optional per-client script.
 | | ID | Item | Notes |
 |---|---|---|---|
 | 🧪 | F1 | Auto sign-in **once** after the sysprep reboot | Passwordless-only setting turned off before sysprep / in the clean-install answer file |
-| 🧪 | F2 | Windows Update retry / fallback | Confirm no crash on `0x80248007`; summary + cleanup still run |
-| 🧪 | F3 | SoWork silent install (`/S`) | Undocumented switch; confirm it's installed for `csagent` |
+| ✅ | F2 | Windows Update retry / fallback | SAFITEKHT-CS-03 (2026-11-24): updates installed, summary and final report sent |
+| 🧪 | F3 | SoWork silent install (`/S`) | SAFITEKHT-CS-03: installer finished OK. Still to check: SoWork opens for `csagent` |
 | 🧪 | F4 | WhatsApp Web shortcut | Icon on desktop + Start for all users |
 | 🧪 | F5 | Auto sign-in OFF after the final reboot | PC must stop at the sign-in screen |
 | 🧪 | F6 | Clean-install ISO | `Build-ISO.ps1` / UI on Windows as Administrator, boot in a VM |
@@ -108,13 +109,17 @@ needs go in an optional per-client script.
 | 👤 | F12 | Push to GitHub | `main` and `client-ui` are local only. Decision 2026-11-24: not yet, wait until testing is done |
 | ✅ | F13 | Passwords on media | Mitigated: secrets separated, never in git, deleted from the PC after a provisioning run. Media itself still holds them: keep it private |
 | ✅ | F14 | Berling name pattern too long | Was `BERLING-PROD-PC##` (17 characters, Windows max 15). Already changed in the UI to `BRLNG-PROD-PC##` (15, valid); `BERLING-PRD-##` is the alternative if preferred |
-| 🧪 | F15 | New `Setup.ps1` on a real PC | Rewritten (JSON, isolated steps, status file); run one PC end to end and read `C:\ProgramData\Provisioning\status.json` |
+| ✅ | F15 | New `Setup.ps1` on a real PC | SAFITEKHT-CS-03 ran end to end (2026-11-24); only the custom script failed (F24) |
 | 🧪 | F16 | UI + builds on a Windows tech machine | Start-UI, winget search (uses `winsqlite3.dll`), provisioning ISO via IMAPI2 |
-| 🧪 | F17 | Progress reports over the network | UI with `-Lan`, build with "PCs report their progress", watch the batch tiles; Windows may ask to allow PowerShell through the firewall |
+| ✅ | F17 | Progress reports over the network | PCs 3, 4, 5 reported to the Mac UI (2026-11-24) |
 | ✅ | F19 | UI slow / "← Clients" did nothing / "Operation timed out" in the terminal (Safari worst) | Server waited on idle browser pre-connections one at a time; now serves whichever connection has data and drops idle ones. Regression test added |
 | ✅ | F20 | Batch form vanished while typing | The batch list's 8 s auto-refresh kept running when the form opened; now stopped while a form is open. Regression test added |
 | ✅ | F22 | Provisioning ISO build showed "failed" (`NotSpecified ... RemoteException`) although the ISO was fine | `hdiutil` writes an empty line to stderr, which a background job reports as an error. Tool output is now captured, and a build only fails if the job fails or returns nothing. Test added |
 | 🧪 | F23 | winget showed one long line of garbled characters instead of its progress bar | `Setup.ps1` piped winget (`\| Out-Host`), so winget wasn't writing to the window. Now runs attached to the window via `Invoke-Winget`; winget's own output goes to `C:\ProgramData\Provisioning\logs\winget_<app>.log`. Needs a rebuilt ISO + one PC to confirm |
+| 🧪 | F24 | SAFITEK custom script failed: it is a Command Prompt (batch) script, run as PowerShell | `Setup.ps1` now runs a custom script starting with `@echo off` / `rem` / `::` / `setlocal` through `cmd.exe`. Note: this script installs WhatsApp **from the Microsoft Store** (`winget download --source msstore` + `Add-AppxProvisionedPackage`), which goes against D5; the user chose it. Test it once by hand on a PC |
+| 🧪 | F25 | AnyDesk unattended access + ID | New `anydesk` switch + `anydeskPassword` secret; `Setup.ps1` runs `AnyDesk.exe --set-password` and `--get-id` (retries 2 min); ID shown on the batch tile and in `status.json` |
+| 🧪 | F26 | PC IP address in reports | Reported from the first report (right after WiFi), shown on the batch tile, so a PC can be reached by IP during setup |
+| 👤 | F27 | "No internet after 3 minutes" on PCs 3 and 5, yet apps installed later | WiFi joins slowly on some PCs. Harmless; the wait can be lengthened if it causes failures |
 | 🧪 | F21 | Re-test the UI in Safari | Fixes above tested in Chrome (headless) + automated; confirm in Safari |
 | 👤 | F18 | Media built before `2cdbc6f` | Old ISOs/USBs carry their own old scripts + `config.ps1` and keep working the old way, without batches/reports/status. Rebuild from the UI to get the new behaviour (e.g. `dist/safitek/SAFITEK-Provision.iso` is the old one) |
 
